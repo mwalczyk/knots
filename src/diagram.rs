@@ -1,10 +1,12 @@
 use cgmath::Vector3;
 use std::ffi::OsStr;
 use std::io;
+use crate::knot::Knot;
 use std::path::Path;
+use crate::polyline::Polyline;
 
 /// Reference: `https://www.math.ucdavis.edu/~slwitte/research/BlackwellTapiaPoster.pdf`
-enum Cromwell {
+enum CromwellMove {
     Translation,
     Commutation,
     Stabilization,
@@ -46,19 +48,19 @@ impl Diagram {
             resolution,
             data
         };
-        diagram.validate();
+        // TODO: diagram.validate();
         diagram
     }
 
     /// Generates a random, valid grid diagram that may or may not be the unknot.
     pub fn random() {
-
+        unimplemented!()
     }
 
     /// Validates the grid diagram, ensuring that there is only one `x` and one `o`
     /// per column and row.
     fn validate(&self) {
-
+        unimplemented!()
     }
 
     pub fn get_resolution(&self) -> usize {
@@ -92,7 +94,7 @@ impl Diagram {
     }
 
     /// Generates the knot corresponding to this grid diagram.
-    pub fn generate_knot(&self) -> Vec<Vector3<f32>> {
+    pub fn generate_knot(&self) -> Knot {
         // We begin traversing the knot at the first column...
         // "Start", (relative) index of the `x` in the first column (there will always be one)
         // "End", (relative) index of the `o` in the first column (there will always be one)
@@ -114,13 +116,31 @@ impl Diagram {
             // Note that:
             // Cols are connected: x -> o
             // Rows are connected: o -> x
-            let slice = if traverse_horizontal { self.get_row(e) } else { self.get_column(e) };
+            let slice = if traverse_horizontal {
+                self.get_row(e)
+            } else {
+                self.get_column(e)
+            };
 
             // We just found an `o` (in the last column), so find the `x` in this row
-            let next_index = slice.iter().collect::<String>().find('x').unwrap();
+            let next_index = if traverse_horizontal {
+                slice.iter().collect::<String>().find('x').unwrap()
+            } else {
+                slice.iter().collect::<String>().find('o').unwrap()
+            };
 
-            if !knot_topology.contains(&self.convert_to_absolute_index(e, next_index)) {
-                knot_topology.push(self.convert_to_absolute_index(e, next_index));
+            // Convert the above index to absolute indices that range from `[0..(self.resolution * self.resolution)]`,
+            // taking care to modify the function parameters based on the current orientation (horizontal / vertical)
+            let absolute_index = if traverse_horizontal {
+                self.convert_to_absolute_index(e, next_index)
+            } else {
+                self.convert_to_absolute_index(next_index, e)
+            };
+
+            // Push back the new endpoint and check to see whether we have finished traversing the entire
+            // knot
+            if !knot_topology.contains(&absolute_index) {
+                knot_topology.push(absolute_index);
             } else {
                 // We are at the end
                 knot_topology.push(tie);
@@ -133,11 +153,28 @@ impl Diagram {
             // Switch directions
             traverse_horizontal = !traverse_horizontal;
         }
+        println!("Knot topology: {:?}", knot_topology);
+
+        // This should always be true, i.e. for a 6x6 grid there should be 6 pairs of x's and o's (12
+        // indices total)
+        assert_eq!(knot_topology.len(), self.resolution * 2 + 1);
 
         // Convert indices to actual 3D positions so that we can
         // (eventually) draw a polyline corresponding to this knot
-        // ...
+        let mut path = Polyline::new();
+        let w = 1.0;
+        let h = 1.0;
+        for absolute_index in knot_topology {
+            let (i, j) = self.convert_to_grid_indices(absolute_index);
 
-        vec![]
+            // `i` is the row
+            // `j` is the col
+            let x = (j as f32 / self.resolution as f32) * w - 0.5 * w;
+            let y = (i as f32 / self.resolution as f32) * h - 0.5 * h;
+            let z = 0.0;
+            path.push_vertex(&Vector3::new(x, y, z));
+        }
+
+        Knot::new(&path)
     }
 }

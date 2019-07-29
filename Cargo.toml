@@ -9,5 +9,5 @@ edition = "2018"
 [dependencies]
 gl = "0.6.5"
 glutin = "0.10.1"
-cgmath = "0.17.0"
+cgmath = "0.15.0"
 csv = "1.1.1"

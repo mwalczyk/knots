@@ -63,6 +63,43 @@ impl Program {
         Ok(shader)
     }
 
+    fn link_single_stage_program(cs: GLuint) -> Result<GLuint, String> {
+        unsafe {
+            let program = gl::CreateProgram();
+            gl::AttachShader(program, cs);
+            gl::LinkProgram(program);
+
+            // Get the link status.
+            let mut status = gl::FALSE as GLint;
+            gl::GetProgramiv(program, gl::LINK_STATUS, &mut status);
+
+            // If there was an error, return the error string.
+            if status != (gl::TRUE as GLint) {
+                let mut len: GLint = 0;
+                gl::GetProgramiv(program, gl::INFO_LOG_LENGTH, &mut len);
+                let mut buffer = Vec::with_capacity(len as usize);
+
+                // Subtract 1 to skip the trailing null character.
+                buffer.set_len((len as usize) - 1);
+
+                gl::GetProgramInfoLog(
+                    program,
+                    len,
+                    ptr::null_mut(),
+                    buffer.as_mut_ptr() as *mut GLchar,
+                );
+                gl::DeleteShader(cs);
+
+                let error = String::from_utf8(buffer)
+                    .ok()
+                    .expect("ProgramInfoLog not valid utf8");
+                return Err(error);
+            }
+
+            Ok(program)
+        }
+    }
+
     fn link_two_stage_program(vs: GLuint, fs: GLuint) -> Result<GLuint, String> {
         unsafe {
             let program = gl::CreateProgram();
@@ -132,6 +169,25 @@ impl Program {
             // The fragment shader resulted in an error.
             (Ok(_), Err(fs_err)) => {
                 println!("{}", fs_err);
+                return None;
+            }
+        }
+    }
+
+    /// Compiles a single-stage (compute) shader from source.
+    pub fn single_stage(cs_src: String) -> Option<Program> {
+        let compile_cs_res = Program::compile_shader(&cs_src, gl::COMPUTE_SHADER);
+
+        match compile_cs_res {
+            Ok(cs_id) => {
+                if let Ok(id) = Program::link_single_stage_program(cs_id) {
+                    return Some(Program { id });
+                } else {
+                    return None;
+                }
+            }
+            Err(cs_err) => {
+                println!("{}", cs_err);
                 return None;
             }
         }

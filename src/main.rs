@@ -5,11 +5,12 @@
 #![allow(unused_assignments)]
 #![allow(unreachable_code)]
 #![allow(unreachable_patterns)]
-#![allow(bare_trait_objects)]
+//#![allow(bare_trait_objects)]
 // Should be able to do this, but the Intellij plugin doesn't support it yet...
 //mod gl { include!(concat!(env!("OUT_DIR"), "/bindings.rs")); }
-mod gl { include!("../target/debug/build/gl-c987f7e774ed107e/out/bindings.rs"); }
+//mod gl { include!("../target/debug/build/gl-c987f7e774ed107e/out/bindings.rs"); }
 
+extern crate gl;
 extern crate cgmath;
 extern crate csv;
 extern crate glutin;
@@ -17,12 +18,19 @@ extern crate glutin;
 mod constants;
 mod diagram;
 mod knot;
+mod polyline;
 mod program;
+mod renderer;
+mod tangle;
 
-use glutin::GlContext;
-use std::path::Path;
-use crate::program::Program;
 use crate::diagram::Diagram;
+use crate::polyline::Polyline;
+use crate::program::Program;
+use crate::renderer::Renderer;
+use glutin::GlContext;
+use std::fs::File;
+use std::io::Read;
+use std::path::Path;
 
 /// Clears the default OpenGL framebuffer (color and depth)
 fn clear() {
@@ -32,9 +40,23 @@ fn clear() {
     }
 }
 
-fn main() {
+fn set_draw_state() {
+    unsafe {
+        gl::LineWidth(2.0);
+    }
+}
 
-    // Set up windowing and event loop
+/// Returns the string contents of the file at `path`.
+pub fn load_file_as_string(path: &Path) -> String {
+    let mut file = File::open(path).expect("File not found");
+    let mut contents = String::new();
+    file.read_to_string(&mut contents)
+        .expect("Something went wrong reading the file");
+
+    contents
+}
+
+fn main() {
     let mut events_loop = glutin::EventsLoop::new();
     let window = glutin::WindowBuilder::new()
         .with_dimensions(constants::WIDTH, constants::HEIGHT)
@@ -47,6 +69,15 @@ fn main() {
 
     let file = Path::new("src/example_diagrams/test.csv");
     let diagram = Diagram::from_path(file);
+    let knot = diagram.generate_knot();
+
+    let draw_program = Program::two_stage(
+        load_file_as_string(Path::new("shaders/draw.vert")),
+        load_file_as_string(Path::new("shaders/draw.frag")),
+    ).unwrap();
+    let renderer = Renderer::new();
+
+    set_draw_state();
 
     loop {
         events_loop.poll_events(|event| match event {
@@ -60,6 +91,9 @@ fn main() {
             _ => (),
         });
         clear();
+
+        draw_program.bind();
+        renderer.draw_polyline(knot.get_path());
 
         gl_window.swap_buffers().unwrap();
     }
