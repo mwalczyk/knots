@@ -12,11 +12,11 @@ pub struct Knot {
 }
 
 impl Knot {
-    pub fn new(path: &Polyline, topology: &Option<Vec<Crossing>>) -> Knot {
-        let mut knot = Knot {
+    pub fn new(path: &Polyline, topology: Option<&Vec<Crossing>>) -> Knot {
+        let knot = Knot {
             path: path.clone()
         };
-        
+
         knot
     }
 

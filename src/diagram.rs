@@ -153,28 +153,104 @@ impl Diagram {
             // Switch directions
             traverse_horizontal = !traverse_horizontal;
         }
-        println!("Knot topology: {:?}", knot_topology);
+
+        // If we want to traverse just rows or just columns, we can simply use the underlying knot
+        // topology and ignore either the first or last element
+        let mut rows = knot_topology.clone();
+        let mut cols = knot_topology.clone();
+        rows.remove(0);
+        cols.pop();
+        println!("Knot topology (before inserting any crossings): {:?}", knot_topology);
 
         // This should always be true, i.e. for a 6x6 grid there should be 6 pairs of x's and o's (12
-        // indices total)
+        // indices total)...note that we perform this check before checking for any crossings, which
+        // will necessarily add more indices to the knot topology
         assert_eq!(knot_topology.len(), self.resolution * 2 + 1);
+
+        // Find crossings: rows pass under any columns that they intersect, so we will
+        // add additional vertex (or vertices) to any column that contains a intersection(s)
+        // and "lift" this vertex (or vertices) along the z-axis
+        for col_chunk in cols.chunks(2) {
+            let (mut col_s, mut col_e) = (col_chunk[0], col_chunk[1]);
+
+            let mut oriented_upwards = false;
+
+            // If this condition is `true`, then the column is oriented from bottom to
+            // top (i.e. "upwards") - we do this so that it is "easier" to tell whether
+            // or not a row intersects a column (see below)
+            if col_s > col_e {
+                std::mem::swap(&mut col_s, &mut col_e);
+                oriented_upwards = true;
+            }
+
+            let (cs_i, cs_j) = self.convert_to_grid_indices(col_s);
+            let (ce_i, ce_j) = self.convert_to_grid_indices(col_e);
+
+            // A list of all intersections along this column
+            let mut intersections = vec![];
+
+            for row_chunk in rows.chunks(2) {
+                let (mut row_s, mut row_e) = (row_chunk[0], row_chunk[1]);
+
+                if row_s > row_e {
+                    std::mem::swap(&mut row_s, &mut row_e);
+                }
+
+                let (rs_i, rs_j) = self.convert_to_grid_indices(row_s);
+                let (re_i, re_j) = self.convert_to_grid_indices(row_e);
+
+                if cs_j > rs_j && cs_j < re_j && cs_i < rs_i && ce_i > rs_i {
+
+                    let intersect = self.convert_to_absolute_index(rs_i, cs_j);
+                    intersections.push((rs_i, intersect));
+                }
+            }
+
+            // Sort on the row `i` index (i.e. sort vertically, from top to bottom of the table grid)
+            intersections.sort_by_key(|k| k.0);
+
+            // If the start / end indices of this column were flipped before, we have to reverse the
+            // order in which we insert the crossings here as well
+            if !oriented_upwards {
+                intersections.reverse();
+            }
+
+            println!("Intersections found for column #{}: {:?}", self.convert_to_grid_indices(col_s).1, intersections);
+
+            for (index, node) in knot_topology.iter().enumerate() {
+                //new_topology.push(*node);
+                if *node == col_s || *node == col_e {
+                    for (_, ix) in intersections.iter() {
+                        knot_topology.insert(index + 1, *ix);
+                    }
+                    break;
+                }
+            }
+            println!("   New topology: {:?}", knot_topology);
+        }
+
+        // Ex: old topology vs. new topology (after crossings are inserted)
+        // `[1, 4, 28, __, 26, 8, _, 6, 18, __, 21, 33, 35, 17, __, __, 13, 1]`
+        // `[1, 4, 28, 27, 26, 8, 7, 6, 18, 20, 21, 33, 35, 17, 16, 14, 13, 1]`
 
         // Convert indices to actual 3D positions so that we can
         // (eventually) draw a polyline corresponding to this knot
         let mut path = Polyline::new();
         let w = 1.0;
         let h = 1.0;
-        for absolute_index in knot_topology {
-            let (i, j) = self.convert_to_grid_indices(absolute_index);
+        for absolute_index in knot_topology.iter() {
+            // `i` is the row `[0..self.resolution]`
+            // `j` is the col `[0..self.resolution]`
+            let (i, j) = self.convert_to_grid_indices(*absolute_index);
 
-            // `i` is the row
-            // `j` is the col
+            // World-space position of the vertex corresponding to this grid index
             let x = (j as f32 / self.resolution as f32) * w - 0.5 * w;
-            let y = (i as f32 / self.resolution as f32) * h - 0.5 * h;
+            let y = h - (i as f32 / self.resolution as f32) * h - 0.5 * h;
             let z = 0.0;
+
             path.push_vertex(&Vector3::new(x, y, z));
         }
 
-        Knot::new(&path)
+        Knot::new(&path, None)
     }
 }

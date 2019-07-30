@@ -120,6 +120,7 @@ impl Renderer {
             );
 
             gl::DrawArrays(gl::LINE_STRIP, 0, line.vertices.len() as GLsizei);
+            gl::DrawArrays(gl::POINTS, 0, line.vertices.len() as GLsizei);
         }
     }
 }

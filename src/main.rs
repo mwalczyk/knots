@@ -43,6 +43,7 @@ fn clear() {
 fn set_draw_state() {
     unsafe {
         gl::LineWidth(2.0);
+        gl::PointSize(8.0);
     }
 }
 
