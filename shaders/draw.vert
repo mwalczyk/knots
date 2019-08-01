@@ -8,7 +8,12 @@ out VS_OUT
     vec3 color;
 } vs_out;
 
-vec3 hsv_to_rgb(vec3 c) {
+uniform mat4 u_model;
+uniform mat4 u_view;
+uniform mat4 u_projection;
+
+vec3 hsv_to_rgb(vec3 c)
+{
     const vec4 k = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
     vec3 p = abs(fract(c.xxx + k.xyz) * 6.0 - k.www);
 
@@ -17,7 +22,7 @@ vec3 hsv_to_rgb(vec3 c) {
 
 void main()
 {
-    vs_out.color = hsv_to_rgb(vec3(color.r, 1.0, 1.0));
+    vs_out.color = hsv_to_rgb(vec3(float(gl_VertexID / 116.0), 1.0, 1.0));
 
-    gl_Position = vec4(position, 1.0);
+    gl_Position = u_projection * u_view * u_model * vec4(position, 1.0);
 }

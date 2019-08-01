@@ -116,17 +116,14 @@ impl Diagram {
             // Note that:
             // Cols are connected: x -> o
             // Rows are connected: o -> x
-            let slice = if traverse_horizontal {
-                self.get_row(e)
+            let (next_index, slice) = if traverse_horizontal {
+                // We just found an `o` (in the last column), so find the `x` in this row
+                let slice = self.get_row(e);
+                (slice.iter().collect::<String>().find('x').unwrap(), slice)
             } else {
-                self.get_column(e)
-            };
-
-            // We just found an `o` (in the last column), so find the `x` in this row
-            let next_index = if traverse_horizontal {
-                slice.iter().collect::<String>().find('x').unwrap()
-            } else {
-                slice.iter().collect::<String>().find('o').unwrap()
+                // We just found an `x` (in the last row), so find the `o` in this column
+                let slice = self.get_column(e);
+                (slice.iter().collect::<String>().find('o').unwrap(), slice)
             };
 
             // Convert the above index to absolute indices that range from `[0..(self.resolution * self.resolution)]`,
@@ -170,6 +167,7 @@ impl Diagram {
         // Find crossings: rows pass under any columns that they intersect, so we will
         // add additional vertex (or vertices) to any column that contains a intersection(s)
         // and "lift" this vertex (or vertices) along the z-axis
+        let mut lifted = vec![];
         for col_chunk in cols.chunks(2) {
             let (mut col_s, mut col_e) = (col_chunk[0], col_chunk[1]);
 
@@ -203,6 +201,7 @@ impl Diagram {
 
                     let intersect = self.convert_to_absolute_index(rs_i, cs_j);
                     intersections.push((rs_i, intersect));
+                    lifted.push(intersect);
                 }
             }
 
@@ -218,7 +217,8 @@ impl Diagram {
             println!("Intersections found for column #{}: {:?}", self.convert_to_grid_indices(col_s).1, intersections);
 
             for (index, node) in knot_topology.iter().enumerate() {
-                //new_topology.push(*node);
+
+                // If we have arrived at either the start or end of the column, begin insertion
                 if *node == col_s || *node == col_e {
                     for (_, ix) in intersections.iter() {
                         knot_topology.insert(index + 1, *ix);
@@ -230,6 +230,7 @@ impl Diagram {
         }
 
         // Ex: old topology vs. new topology (after crossings are inserted)
+        //
         // `[1, 4, 28, __, 26, 8, _, 6, 18, __, 21, 33, 35, 17, __, __, 13, 1]`
         // `[1, 4, 28, 27, 26, 8, 7, 6, 18, 20, 21, 33, 35, 17, 16, 14, 13, 1]`
 
@@ -246,10 +247,18 @@ impl Diagram {
             // World-space position of the vertex corresponding to this grid index
             let x = (j as f32 / self.resolution as f32) * w - 0.5 * w;
             let y = h - (i as f32 / self.resolution as f32) * h - 0.5 * h;
-            let z = 0.0;
+            let z = if lifted.contains(absolute_index) {
+                0.1
+            } else {
+                0.0
+            };
 
             path.push_vertex(&Vector3::new(x, y, z));
         }
+
+        // Subdivide the path
+        path = path.refine(0.05);
+        println!("Total vertices in path: {}", path.get_number_of_vertices());
 
         Knot::new(&path, None)
     }
