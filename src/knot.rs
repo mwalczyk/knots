@@ -90,7 +90,7 @@ impl Knot {
         let k = 0.5;
 
         // The length that each stick will try to relax to
-        let d = starting_length * 0.75;
+        let d = starting_length * 0.95;
 
         // Velocity damping factor
         let damping = 0.995;
@@ -103,7 +103,7 @@ impl Knot {
         let d_max = starting_length * 0.125;
 
         // The closest any two sticks can be
-        let d_close = starting_length * 0.25;
+        let d_close = starting_length * 0.5;
 
         // Calculate forces
         for index in 0..self.p.len() {
@@ -142,41 +142,6 @@ impl Knot {
             // Apply anchor force
             force += anchor_force * anchor_weight;
 
-            // Apply repulsive force away from neighboring segments
-            let mut repulsion = Vector3::new(0.0, 0.0, 0.0);
-            let mut number_of_interactions = 0;
-
-            // Don't worry about the last (wrapped) segment for now...
-            if index > 0 && index < (self.rope.get_number_of_vertices() - 1) {
-
-                let segment_a = self.rope.get_segment(index);
-
-                for j in 0..self.rope.get_number_of_vertices() - 1 {
-
-                    // Don't test the current segment against itself or its immediate neighbors
-                    if j != index && j != (index - 1) && j != (index + 1)
-                    {
-                        let segment_b = self.rope.get_segment(j);
-                        let maybe_joining = segment_a.distance_between(&segment_b);
-
-                        if let Some(joining) = maybe_joining {
-
-                            if joining.length() <= d_close {
-                                println!("Segment {} is TOO CLOSE to {}: {}", index, j, joining.length());
-
-                                // Push segment A away from segment B: `to - from`
-                                let direction = joining.get_start() - joining.get_end();
-
-                                repulsion += direction.normalize() * joining.length();
-                                number_of_interactions += 1;
-                            }
-                        }
-                    }
-                }
-            }
-            force += (repulsion / number_of_interactions as f32) * 0.001;
-
-
             // Apply force to both springs: `F = m * a`
             self.a[index_a] += force / mass
         }
@@ -184,7 +149,7 @@ impl Knot {
         // Integrate velocity (with damping)
         for index in 0..self.v.len() {
             self.v[index] += self.a[index];
-            self.v[index] *= damping;
+            //self.v[index] *= damping;
 
             // Zero out the acceleration for the next time step
             self.a[index] = Vector3::zero();
@@ -203,6 +168,38 @@ impl Knot {
             self.p[index] += clamped;
 
             // TODO: if moving this vertex is illegal, reset its position to `old`
+            // Apply repulsive force away from neighboring segments
+//            let mut repulsion = Vector3::new(0.0, 0.0, 0.0);
+//            let mut number_of_interactions = 0;
+
+            // Don't worry about the last (wrapped) segment for now...
+            if index > 0 && index < (self.rope.get_number_of_vertices() - 1) {
+
+                let segment_a = self.rope.get_segment(index);
+
+                for j in 0..self.rope.get_number_of_vertices() - 1 {
+
+                    // Don't test the current segment against itself or its immediate neighbors
+                    if j != index && j != (index - 1) && j != (index + 1)
+                    {
+                        let segment_b = self.rope.get_segment(j);
+
+                        let vector_between = segment_a.shortest_distance_between(&segment_b);
+                        if vector_between.magnitude() <= d_close {
+                            self.p[index] = old;
+
+                            //println!("Segment {} is too close to segment {}, with distance: {}", index, j, vector_between.magnitude());
+                            // Push segment A away from segment B: `to - from`
+                            //repulsion += vector_between;
+                            //number_of_interactions += 1;
+                        }
+
+                    }
+                }
+            }
+//            if number_of_interactions >= 1 {
+//                force += (repulsion / number_of_interactions as f32);
+//            }
         }
 
         // Set new positions

@@ -44,180 +44,101 @@ impl Segment {
         self.a + d * t
     }
 
-    fn clamp_point_to(&self, point_to_clamp: &Vector3<f32>) -> Vector3<f32> {
-        let mut clamped_point = Vector3::zero();
+    /// Reference: `http://geomalgorithms.com/a07-_distance.html#dist3D_Segment_to_Segment`
+    pub fn shortest_distance_between(&self, other: &Segment) -> Vector3<f32> {
+        let u = self.b - self.a;
+        let v = other.b - other.a;
+        let w = self.a - other.a;
+        let a = u.dot(u); // always >= 0
+        let b = u.dot(v);
+        let c = v.dot(v); // always >= 0
+        let d = u.dot(w);
+        let e = v.dot(w);
+        let D = a*c - b*b; // always >= 0
 
-        let min_x;
-        let min_y;
-        let min_z;
-        let max_x;
-        let max_y;
-        let max_z;
+        let mut sc: f32 = 0.0;
+        let mut sN: f32 = 0.0;
+        let mut sD = D;       // sc = sN / sD, default sD = D >= 0
+        let mut tc: f32 = 0.0;
+        let mut tN: f32= 0.0;
+        let mut tD = D;       // tc = tN / tD, default tD = D >= 0
 
-        if self.a.x <= self.b.x
-        {
-            min_x = self.a.x;
-            max_x = self.b.x;
+        // compute the line parameters of the two closest points
+        if D < constants::EPSILON {
+            // the lines are almost parallel
+            sN = 0.0; // force using point P0 on segment self
+            sD = 1.0; // to prevent possible division by 0.0 later
+            tN = e;
+            tD = c;
         }
-        else
-        {
-            min_x = self.b.x;
-            max_x = self.a.x;
-        }
-
-        if self.a.y <= self.b.y
-        {
-            min_y = self.a.y;
-            max_y = self.b.y;
-        }
-        else
-        {
-            min_y = self.b.y;
-            max_y = self.a.y;
-        }
-
-        if self.a.z <= self.b.z
-        {
-            min_z = self.a.z;
-            max_z = self.b.z;
-        }
-        else
-        {
-            min_z = self.b.z;
-            max_z = self.a.z;
+        else {
+            // get the closest points on the infinite lines
+            sN = (b*e - c*d);
+            tN = (a*e - b*d);
+            if sN < 0.0 {
+                // sc < 0 => the s = 0 edge is visible
+                sN = 0.0;
+                tN = e;
+                tD = c;
+            }
+            else if sN > sD {
+                // sc > 1  => the s = 1 edge is visible
+                sN = sD;
+                tN = e + b;
+                tD = c;
+            }
         }
 
-        clamped_point.x = if point_to_clamp.x < min_x {
-            min_x
-        } else {
-            if point_to_clamp.x > max_x {
-                max_x
+        if tN < 0.0 {
+            // tc < 0 => the t = 0 edge is visible
+            tN = 0.0;
+            // Recompute `sc` for this edge
+            if -d < 0.0 {
+                sN = 0.0;
+            }
+            else if -d > a {
+                sN = sD;
             }
             else {
-                point_to_clamp.x
+                sN = -d;
+                sD = a;
             }
-        };
-
-        clamped_point.y = if point_to_clamp.y < min_y {
-            min_y
-        } else {
-            if point_to_clamp.y > max_y {
-                max_y
+        }
+        else if tN > tD {
+            // tc > 1  => the t = 1 edge is visible
+            tN = tD;
+            // Recompute `sc` for this edge
+            if (-d + b) < 0.0 {
+                sN = 0.0;
+            }
+            else if (-d + b) > a {
+                sN = sD;
             }
             else {
-                point_to_clamp.y
+                sN = (-d +  b);
+                sD = a;
             }
-        };
-
-        clamped_point.x = if point_to_clamp.z < min_z {
-            min_z
+        }
+        // finally do the division to get sc and tc
+        sc = if sN.abs() < constants::EPSILON {
+            0.0
         } else {
-            if point_to_clamp.z > max_z {
-                max_z
-            }
-            else {
-                point_to_clamp.z
-            }
+            sN / sD
         };
 
-        clamped_point
-    }
+        tc = if tN.abs() < constants::EPSILON {
+            0.0
+        } else {
+            tN / tD
+        };
 
-    pub fn distance_between(&self, other: &Segment) -> Option<Segment> {
-        let p1 = self.a;
-        let p2 = self.b;
-        let p3 = other.a;
-        let p4 = other.b;
-        let d1 = p2 - p1;
-        let d2 = p4 - p3;
+        // Get the vector difference of the two closest points
+        let vector_between_closest_points = w + (sc * u) - (tc * v);  // = self(sc) - other(tc)
 
-        let eq1nCoeff = (d1.x * d2.x) + (d1.y * d2.y) + (d1.z * d2.z);
-        let eq1mCoeff = (-(d1.x * d1.x) - (d1.y * d1.y) - (d1.z * d1.z));
-        let eq1Const = ((d1.x * p3.x) - (d1.x * p1.x) + (d1.y * p3.y) - (d1.y * p1.y) + (d1.z * p3.z) - (d1.z * p1.z));
-        let eq2nCoeff = ((d2.x * d2.x) + (d2.y * d2.y) + (d2.z * d2.z));
-        let eq2mCoeff = -(d1.x * d2.x) - (d1.y * d2.y) - (d1.z * d2.z);
-        let eq2Const = ((d2.x * p3.x) - (d2.x * p1.x) + (d2.y * p3.y) - (d2.y * p2.y) + (d2.z * p3.z) - (d2.z * p1.z));
+        //println!("Closest point on first segment: {:?}", self.a + sc * u);
+        //println!("Closest point on second segment: {:?}", other.a + tc * v);
 
-        let mut M = vec![
-            vec![eq1nCoeff, eq1mCoeff, -eq1Const],
-            vec![eq2nCoeff, eq2mCoeff, -eq2Const]
-        ];
-
-        let  rowCount: usize = 2;
-
-        // Pivoting
-        for col in 0..(rowCount - 1) // was: for(int col = 0; col + 1 < rowCount; col++)
-        {
-            if M[col][col] == 0.0
-            // check for zero coefficients
-            {
-                // find non-zero coefficient
-                let mut swapRow = 0;
-
-                for checkRow in (col + 1)..rowCount {
-                    if M[checkRow][col] != 0.0 {
-                        swapRow = checkRow;
-                        break;
-                    }
-                }
-
-                // found a non-zero coefficient?
-                if M[swapRow][col] != 0.0 {
-                    // yes, then swap it with the above
-                    let mut tmp = vec![0.0; rowCount + 1];
-                    for i in 0..rowCount + 1 {
-                        tmp[i] = M[swapRow][i];
-                        M[swapRow][i] = M[col][i];
-                        M[col][i] = tmp[i];
-                    }
-                }
-                else {
-                    println!("Matrix has no unique solution");
-                    return None;
-                }
-            }
-        }
-
-        // elimination
-        for sourceRow in 0..(rowCount - 1) { // was: for (int sourceRow = 0; sourceRow + 1 < rowCount; sourceRow++)
-            for destRow in (sourceRow + 1)..rowCount { // was: for (int destRow = sourceRow + 1; destRow < rowCount; destRow++)
-                let df = M[sourceRow][sourceRow];
-                let sf = M[destRow][sourceRow];
-
-                for i in 0..(rowCount + 1) {
-                    M[destRow][i] = M[destRow][i] * df - M[sourceRow][i] * sf;
-                }
-            }
-        }
-
-        println!("{:?}", M);
-
-        // back-insertion
-        for row in (0..=(rowCount - 1)).rev() { // was: for (int row = rowCount - 1; row >= 0; row--)
-            let f = M[row][row];
-
-            if f == 0.0 {
-                println!("Returning none");
-                return None;
-            }
-
-            for i in 0..(rowCount + 1) {
-                M[row][i] /= f;
-            }
-            for destRow in 0..row {
-                M[destRow][rowCount] -= M[destRow][row] * M[row][rowCount];
-                M[destRow][row] = 0.0;
-            }
-        }
-
-        let n = M[0][2];
-        let m = M[1][2];
-        let i1 = Vector3::new(p1.x + (m * d1.x), p1.y + (m * d1.y), p1.z + (m * d1.z));
-        let i2 = Vector3::new(p3.x + (n * d2.x), p3.y + (n * d2.y), p3.z + (n * d2.z));
-        let i1Clamped = self.clamp_point_to(&i1);
-        let i2Clamped = other.clamp_point_to(&i1);
-
-        Some(Segment::new(&i1Clamped, &i2Clamped))
+        vector_between_closest_points
     }
 
     pub fn intersect_2d(&self, other: &Segment) -> Option<Intersection> {
@@ -345,12 +266,22 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_distance_between() {
+    fn test_distance_between_0() {
         let segment_a = Segment::new(&Vector3::new(-1.0, 1.0, 0.0), &Vector3::new(-1.0, -1.0, 0.0));
         let segment_b = Segment::new(&Vector3::new(1.0, 1.0, 0.0), &Vector3::new(1.0, -1.0, 0.0));
 
-        let joining = segment_a.distance_between(&segment_b);
+        let shortest_distance = segment_a.shortest_distance_between(&segment_b);
 
-        assert_eq!(joining.unwrap().length(), 2.0);
+        assert_eq!(shortest_distance.magnitude(), 2.0);
+    }
+
+    #[test]
+    fn test_distance_between_1() {
+        let segment_a = Segment::new(&Vector3::new(-1.0, 1.0, 0.0), &Vector3::new(0.0, -1.0, 0.0));
+        let segment_b = Segment::new(&Vector3::new(1.0, 1.0, 0.0), &Vector3::new(1.0, -1.0, 0.0));
+
+        let shortest_distance = segment_a.shortest_distance_between(&segment_b);
+
+        assert_eq!(shortest_distance.magnitude(), 1.10);
     }
 }
