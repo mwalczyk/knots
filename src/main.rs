@@ -6,7 +6,7 @@
 #![allow(unreachable_code)]
 #![allow(unreachable_patterns)]
 #![allow(non_snake_case)]
-//#![allow(bare_trait_objects)]
+
 // Should be able to do this, but the Intellij plugin doesn't support it yet...
 //mod gl { include!(concat!(env!("OUT_DIR"), "/bindings.rs")); }
 //mod gl { include!("../target/debug/build/gl-c987f7e774ed107e/out/bindings.rs"); }
@@ -166,8 +166,9 @@ fn main() {
         draw_program.uniform_matrix_4f("u_view", &view);
         draw_program.uniform_matrix_4f("u_projection", &projection);
         renderer.draw_polyline(knot.get_rope());
-        knot.relax();
-        
+        //knot.relax();
+        renderer.draw_tube(knot.get_rope());
+
         gl_window.swap_buffers().unwrap();
     }
 }

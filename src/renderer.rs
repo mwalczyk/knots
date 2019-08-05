@@ -1,4 +1,4 @@
-use cgmath::{EuclideanSpace, Point3, Vector2, Vector3};
+use cgmath::{EuclideanSpace, InnerSpace, Matrix3, Point3, Vector2, Vector3, Zero};
 use crate::polyline::Polyline;
 use gl;
 use gl::types::*;
@@ -219,6 +219,7 @@ pub enum Plane {
 
 pub struct Renderer {
     polyline_cache: Mesh,
+    tube_cache: Mesh,
     // See: `https://github.com/openframeworks/openFrameworks/blob/master/libs/openFrameworks/gl/ofGLProgrammableRenderer.h#L241`
     //
     // circle_mesh: Mesh,
@@ -235,6 +236,7 @@ impl Renderer {
     pub fn new() -> Renderer {
         let renderer = Renderer{
             polyline_cache: Mesh::new(&vec![], None, None, None),
+            tube_cache: Mesh::new(&vec![], None, None, None),
         };
 
         renderer
@@ -260,5 +262,71 @@ impl Renderer {
         self.polyline_cache.set_positions(line.get_vertices());
         self.polyline_cache.draw(gl::LINE_LOOP);
         self.polyline_cache.draw(gl::POINTS);
+    }
+
+    /// Reference: `https://github.com/openframeworks/openFrameworks/blob/master/libs/openFrameworks/graphics/ofPolyline.inl#L1069`
+    pub fn draw_tube(&mut self, line: &Polyline) {
+        // Path guided extrusion
+        let mut circle_vertices = vec![];
+        let circle_center = Vector3::new(0.0, 0.0, 0.0);
+        let circle_radius = 0.15;
+        let number_of_segments = 6;
+
+        // First, gather the vertices for a circle centered at the origin on the XY-plane
+        for index in 0..number_of_segments {
+            let theta = 2.0 * 3.1415926 * (index as f32 / number_of_segments as f32);
+            let x = circle_radius * theta.cos();
+            let y = circle_radius * theta.sin();
+            circle_vertices.push(Vector3::new(x + circle_center.x, 0.0, y + circle_center.y));//0.0));
+        }
+
+        let mut tube_vertices = vec![];
+
+        // Then, at each vertex of the polyline, do the following:
+        //
+        // 1. Calculate the tangent vector
+        // 2. Calculate the normal vector
+        // 3. Use (1) and (2) to calculate the binormal vector
+        // 4. Translate the circle "stamp" to the current vertex
+        // 5. Rotate the circle "stamp" to lie in the XY-plane of this coordinate system
+        // 6. Emit these vertices and connect them to the previous "stamp"
+        for center_index in 0..line.get_number_of_vertices() {
+            let (neighbor_l_index, neighbor_r_index) = line.get_neighboring_indices_wrapped(center_index);
+
+            let center = line.get_vertices()[center_index];
+            let neighbor_l = line.get_vertices()[neighbor_l_index];
+            let neighbor_r = line.get_vertices()[neighbor_r_index];
+
+            let v1 = (neighbor_l - center).normalize(); // Vector that points towards the left neighbor
+            let v2 = (neighbor_r - center).normalize(); // Vector that points towards the right neighbor
+
+            // TODO: this probably won't work as we begin to move the polyline off of the XY-plane
+            let right = Vector3::new(0.0, 0.0, -1.0);
+
+            // Construct a basis around `center`, using the tangent, normal, and binormal vectors
+            let tangent = if (v2 - v1).magnitude2() > 0.0 {
+                (v2 - v1).normalize()
+            } else {
+                -v1
+            };
+            let normal = right.cross(tangent);
+            let binormal = tangent.cross(normal);
+
+            for point in circle_vertices.iter() {
+                // TODO: not sure about the column order here...also, this could be done with a single `Matrix4`
+                let transformation = Matrix3::from_cols(binormal, tangent, normal);
+                let mut transformed_point = transformation * point;
+                transformed_point += center;
+
+                tube_vertices.push(transformed_point);
+            }
+
+            if center_index > 0 {
+                // Connect to previous "stamp"
+            }
+        }
+
+        self.tube_cache.set_positions(&tube_vertices);
+        self.tube_cache.draw(gl::POINTS);
     }
 }

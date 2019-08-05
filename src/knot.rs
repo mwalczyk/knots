@@ -83,7 +83,7 @@ impl Knot {
         let mass = 1.0;
 
         // Velocity damping factor
-        let damping = 0.95;
+        let damping = 0.5;
 
         // How much each bead wants to stay near its original position (`0.0` means that
         // we ignore this force)
@@ -93,23 +93,14 @@ impl Knot {
         let d_max = starting_length * 0.025;
 
         // The closest any two sticks can be (note that this should be larger than `d_max`)
-        let d_close = starting_length * 0.5;
+        let d_close = starting_length * 0.25;
 
         // Calculate forces
         for center_index in 0..self.p.len() {
             let mut force = Vector3::zero();
 
             // Get the indices of the left and right neighbors
-            let neighbor_l_index = if center_index == 0 {
-                self.p.len() - 1
-            } else {
-                center_index - 1
-            };
-            let neighbor_r_index = if center_index == self.p.len() - 1 {
-                0
-            } else {
-                center_index + 1
-            };
+            let (neighbor_l_index, neighbor_r_index) = self.rope.get_neighboring_indices_wrapped(center_index);
 
             // The "center" (i.e. current) bead
             let center = self.p[center_index];
@@ -159,7 +150,7 @@ impl Knot {
             //force += anchor_force * anchor_weight;
 
             // Apply force(s) to this bead: `F = m * a`
-            self.a[index] += force / mass
+            self.a[center_index] += force / mass
         }
 
         // Integrate velocity (with damping)

@@ -18,10 +18,12 @@ impl Segment {
         }
     }
 
+    /// Returns the first endpoint of this line segment.
     pub fn get_start(&self) -> &Vector3<f32> {
         &self.a
     }
 
+    /// Returns the second endpoint of this line segment.
     pub fn get_end(&self) -> &Vector3<f32> {
         &self.b
     }
@@ -31,10 +33,14 @@ impl Segment {
         (self.b - self.a).magnitude()
     }
 
+    /// Returns the midpoint of this line segment.
     pub fn midpoint(&self) -> Vector3<f32> {
         (self.a + self.b) / 2.0
     }
 
+    /// Returns the point at `t` along this line segment, where a value
+    /// of `0.0` corresponds to `self.a` and a value of `1.0` corresponds
+    /// to `self.b`.
     pub fn point_at(&self, t: f32) -> Vector3<f32> {
         assert!(t >= 0.0 && t <= 1.0);
 
@@ -44,6 +50,8 @@ impl Segment {
         self.a + d * t
     }
 
+    /// Returns the shortest distance between this segment and `other`.
+    ///
     /// Reference: `http://geomalgorithms.com/a07-_distance.html#dist3D_Segment_to_Segment`
     pub fn shortest_distance_between(&self, other: &Segment) -> Vector3<f32> {
         let u = self.b - self.a;
@@ -140,34 +148,6 @@ impl Segment {
 
         vector_between_closest_points
     }
-
-    pub fn intersect_2d(&self, other: &Segment) -> Option<Intersection> {
-        let p0_x = self.a.x;
-        let p0_y = self.a.y;
-        let p1_x = self.b.x;
-        let p1_y = self.b.y;
-
-        let p2_x = other.a.x;
-        let p2_y = other.a.y;
-        let p3_x = other.b.x;
-        let p3_y = other.b.y;
-
-        let s1_x = p1_x - p0_x;
-        let s1_y = p1_y - p0_y;
-        let s2_x = p3_x - p2_x;
-        let s2_y = p3_y - p2_y;
-
-        let s = (-s1_y * (p0_x - p2_x) + s1_x * (p0_y - p2_y)) / (-s2_x * s1_y + s1_x * s2_y);
-        let t = ( s2_x * (p0_y - p2_y) - s2_y * (p0_x - p2_x)) / (-s2_x * s1_y + s1_x * s2_y);
-
-        // We use an epsilon here to avoid heads-to-tails intersections between segments
-        if s >= constants::EPSILON && s <= (1.0 - constants::EPSILON) && t >= constants::EPSILON && t <= (1.0 - constants::EPSILON) {
-            return Some((Vector3::new(p0_x + (t * s1_x), p0_y + (t * s1_y), 0.0), s, t));
-        }
-
-        // No collision was found
-        None
-    }
 }
 
 type BoundingBox = (Point3<f32>, Point3<f32>);
@@ -188,20 +168,75 @@ impl Polyline {
         &self.vertices
     }
 
+    /// Returns the indices of the "left" and "right" neighbors to the vertex at
+    /// index `center_index`. The polyline is assumed to be "closed" so that the
+    /// "left" neighbor of the vertex at index `0` is the index of the last vertex
+    /// in this polyline, etc.
+    pub fn get_neighboring_indices_wrapped(&self, center_index: usize) -> (usize, usize) {
+        let neighbor_l_index = if center_index == 0 {
+            self.get_number_of_vertices() - 1
+        } else {
+            center_index - 1
+        };
+        let neighbor_r_index = if center_index == self.get_number_of_vertices() - 1 {
+            0
+        } else {
+            center_index + 1
+        };
+
+        (neighbor_l_index, neighbor_r_index)
+    }
+
     pub fn set_vertices(&mut self, vertices: &Vec<Vector3<f32>>) {
         self.vertices = vertices.clone();
     }
 
+    /// Adds a new vertex `v` to the end of the polyline.
     pub fn push_vertex(&mut self, v: &Vector3<f32>) {
         self.vertices.push(*v);
     }
 
+    /// Removes the last vertex from the polyline.
     pub fn pop_vertex(&mut self) {
         self.vertices.pop();
     }
 
+    /// Returns the number of vertices that make up this polyline.
     pub fn get_number_of_vertices(&self) -> usize {
         self.vertices.len()
+    }
+
+    pub fn point_at(&self, t: f32) -> Vector3<f32> {
+        assert!(t >= 0.0 && t <= 1.0);
+
+        let desired_length = self.length() * t;
+        let mut traversed = 0.0;
+        let mut point = Vector3::zero();
+
+        for index in 0..self.get_number_of_vertices() - 1 {
+            let segment = self.get_segment(index);
+            traversed += segment.length();
+
+            if traversed >= desired_length {
+                // We know that the point lies on this segment somewhere...
+                // o ----- o -x---- o ------ o
+                let along_segment = traversed - desired_length;
+
+                point = segment.point_at((segment.length() - along_segment) / segment.length());
+                break;
+            }
+        }
+        point
+    }
+
+    pub fn length(&self) -> f32 {
+        let mut total = 0.0;
+
+        for index in 0..self.get_number_of_vertices() - 1 {
+            let segment = self.get_segment(index);
+            total += segment.length();
+        }
+        total
     }
 
     /// Returns the line segment between vertex `index` and `index + 1`.
@@ -211,6 +246,8 @@ impl Polyline {
             &self.vertices[(index + 1)])// % self.vertices.len()])
     }
 
+    /// Returns the average length of the line segments that make up this
+    /// polyline.
     pub fn get_average_segment_length(&self) -> f32 {
         let mut total = 0.0;
         let mut count = 0;
@@ -282,6 +319,48 @@ mod tests {
 
         let shortest_distance = segment_a.shortest_distance_between(&segment_b);
 
-        assert_eq!(shortest_distance.magnitude(), 1.10);
+        assert_eq!(shortest_distance.magnitude(), 1.0);
+    }
+
+    #[test]
+    fn test_point_at_0() {
+        let mut polyline = Polyline::new();
+        polyline.push_vertex(&Vector3::new(0.0, 0.0, 0.0));
+        polyline.push_vertex(&Vector3::new(1.0, 0.0, 0.0));
+        polyline.push_vertex(&Vector3::new(2.0, 0.0, 0.0));
+        polyline.push_vertex(&Vector3::new(3.0, 0.0, 0.0));
+        polyline.push_vertex(&Vector3::new(4.0, 0.0, 0.0));
+
+        // 0 --- 1 --- 2 --- 3 --- 4
+        let point = polyline.point_at(0.25);
+        assert_eq!(point, Vector3::new(1.0, 0.0, 0.0));
+    }
+
+    #[test]
+    fn test_point_at_1() {
+        let mut polyline = Polyline::new();
+        polyline.push_vertex(&Vector3::new(0.0, 0.0, 0.0));
+        polyline.push_vertex(&Vector3::new(1.0, 0.0, 0.0));
+        polyline.push_vertex(&Vector3::new(2.0, 0.0, 0.0));
+        polyline.push_vertex(&Vector3::new(3.0, 0.0, 0.0));
+        polyline.push_vertex(&Vector3::new(4.0, 0.0, 0.0));
+
+        // 0 --- 1 --- 2 --- 3 --- 4
+        let point = polyline.point_at(0.125);
+        assert_eq!(point, Vector3::new(0.5, 0.0, 0.0));
+    }
+
+    #[test]
+    fn test_point_at_2() {
+        let mut polyline = Polyline::new();
+        polyline.push_vertex(&Vector3::new(0.0, 0.0, 0.0));
+        polyline.push_vertex(&Vector3::new(1.0, 0.0, 0.0));
+        polyline.push_vertex(&Vector3::new(2.0, 0.0, 0.0));
+        polyline.push_vertex(&Vector3::new(3.0, 0.0, 0.0));
+        polyline.push_vertex(&Vector3::new(4.0, 0.0, 0.0));
+
+        // 0 --- 1 --- 2 --- 3 --- 4
+        let point = polyline.point_at(1.0);
+        assert_eq!(point, Vector3::new(4.0, 0.0, 0.0));
     }
 }
