@@ -11,6 +11,7 @@ out VS_OUT
 uniform mat4 u_model;
 uniform mat4 u_view;
 uniform mat4 u_projection;
+uniform float u_number_of_beads = 81.0; // TODO
 
 vec3 hsv_to_rgb(vec3 c)
 {
@@ -22,7 +23,7 @@ vec3 hsv_to_rgb(vec3 c)
 
 void main()
 {
-    vs_out.color = hsv_to_rgb(vec3(float(gl_VertexID / 116.0), 1.0, 1.0));
+    vs_out.color = hsv_to_rgb(vec3(float(gl_VertexID / u_number_of_beads), 1.0, 1.0));
 
     gl_Position = u_projection * u_view * u_model * vec4(position, 1.0);
 }

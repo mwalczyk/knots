@@ -73,8 +73,8 @@ impl Segment {
         }
         else {
             // get the closest points on the infinite lines
-            sN = (b*e - c*d);
-            tN = (a*e - b*d);
+            sN = b * e - c * d;
+            tN = a * e - b * d;
             if sN < 0.0 {
                 // sc < 0 => the s = 0 edge is visible
                 sN = 0.0;

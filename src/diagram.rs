@@ -237,8 +237,8 @@ impl Diagram {
         // Convert indices to actual 3D positions so that we can
         // (eventually) draw a polyline corresponding to this knot
         let mut path = Polyline::new();
-        let w = 1.0;
-        let h = 1.0;
+        let w = self.resolution as f32;
+        let h = self.resolution as f32;
         for absolute_index in knot_topology.iter() {
             // `i` is the row `[0..self.resolution]`
             // `j` is the col `[0..self.resolution]`
@@ -257,7 +257,7 @@ impl Diagram {
         }
 
         // Subdivide the path
-        path = path.refine(0.05);
+        path = path.refine(0.5);
         println!("Total vertices in path: {}", path.get_number_of_vertices());
 
         Knot::new(&path, None)
