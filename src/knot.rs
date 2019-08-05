@@ -82,16 +82,6 @@ impl Knot {
         // The mass of each node ("bead"): we leave this unchanged for now
         let mass = 1.0;
 
-        // Two coefficients of friction, which serve to slow down the simulation
-        let friction_spring = 0.0;
-        let friction_air = 0.0;
-
-        // The spring constant in Hooke's law
-        let k = 0.5;
-
-        // The length that each stick will try to relax to
-        let d = starting_length * 0.95;
-
         // Velocity damping factor
         let damping = 0.95;
 
@@ -106,46 +96,31 @@ impl Knot {
         let d_close = starting_length * 0.5;
 
         // Calculate forces
-        for index in 0..self.p.len() {
-//            let index_a = index + 0;
-//            let mut index_b = index + 1;
-//
-//            // Wrap indices
-//            if index_a == self.p.len() - 1 {
-//                index_b = 0;
-//            }
-//
-//            let bead_a = self.p[index_a];
-//            let bead_b = self.p[index_b];
-//
-//            let neighbor_force = calculate_spring_force(&bead_a, &bead_b, k, d);
-//            let anchor_force = calculate_spring_force(&bead_a, &self.anchors[index_a], k, d);
-//
-//            let mut force = Vector3::zero();
-//            force += neighbor_force;
-//
-//            // Add equal but opposite force to neighbor node
-//            self.a[index_b] += -force / mass;
-
-
-
+        for center_index in 0..self.p.len() {
             let mut force = Vector3::zero();
 
-            let neighbor_l_index = if index == 0 {
+            // Get the indices of the left and right neighbors
+            let neighbor_l_index = if center_index == 0 {
                 self.p.len() - 1
             } else {
-                index - 1
+                center_index - 1
             };
-            let neighbor_r_index = if index == self.p.len() - 1 {
+            let neighbor_r_index = if center_index == self.p.len() - 1 {
                 0
             } else {
-                index + 1
+                center_index + 1
             };
-            let center = self.p[index];
-            for other_index in 0..self.p.len() {
 
-                if other_index != index {
-                    // `other` is not the same bead as `this`, so continue...
+            // The "center" (i.e. current) bead
+            let center = self.p[center_index];
+
+            // Iterate over all potential neighbors
+            for other_index in 0..self.p.len() {
+                if other_index != center_index {
+                    // `other_index` is not the same bead as `center_index`, so continue
+                    // ...
+
+                    // Grab the "other" bead, which may or may not be a neighbor to "center"
                     let other = self.p[other_index];
 
                     if other_index == neighbor_l_index  || other_index == neighbor_r_index {
@@ -179,23 +154,11 @@ impl Knot {
                 }
             }
 
-            // Apply friction force
-            // ...
-            //force += -(self.v[index_a] - self.v[index_b]) * friction_spring;
-
-            // Apply pseudo air resistance
-            // ...
-            //force += -self.v[index_a] * friction_air;
-
-            // Apply gravity
-            // ...
-            //force += Vector3::new(0.0, -9.8, 0.0) * mass;
-
             // Apply anchor force
             // ...
             //force += anchor_force * anchor_weight;
 
-            // Apply force to both springs: `F = m * a`
+            // Apply force(s) to this bead: `F = m * a`
             self.a[index] += force / mass
         }
 
