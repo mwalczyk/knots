@@ -218,8 +218,10 @@ pub enum Plane {
 }
 
 pub struct Renderer {
+    // TODO: do we need more than one mesh? Do we even need this struct?
     polyline_cache: Mesh,
     tube_cache: Mesh,
+
     // See: `https://github.com/openframeworks/openFrameworks/blob/master/libs/openFrameworks/gl/ofGLProgrammableRenderer.h#L241`
     //
     // circle_mesh: Mesh,
@@ -264,128 +266,9 @@ impl Renderer {
         self.polyline_cache.draw(gl::POINTS);
     }
 
-    /// Performs a path guided extrusion along the polyline.
-    ///
-    /// Reference: `https://github.com/openframeworks/openFrameworks/blob/master/libs/openFrameworks/graphics/ofPolyline.inl#L1069`
-    /// `https://stackoverflow.com/questions/5088275/opengl-tube-along-a-path`
     pub fn draw_tube(&mut self, line: &Polyline) {
-        let mut circle_vertices = vec![];
-        let circle_normal = Vector3::new(0.0, 1.0, 0.0);
-        let circle_center = Vector3::new(0.0, 0.0, 0.0);
-        let circle_radius = 0.15;
-        let number_of_segments = 6;
-
-        // First, gather the vertices for a circle centered at the origin on the XZ-plane
-        for index in 0..number_of_segments {
-            let theta = 2.0 * 3.1415926 * (index as f32 / number_of_segments as f32);
-            let x = circle_radius * theta.cos();
-            let y = circle_radius * theta.sin();
-            circle_vertices.push(Vector3::new(x + circle_center.x, 0.0, y + circle_center.y));
-        }
-
-        let mut tube_vertices = vec![];
-
-        // Then, at each vertex of the polyline, do the following:
-        //
-        // 1. Calculate the tangent vector
-        // 2. Calculate the normal vector
-        // 3. Use (1) and (2) to calculate the binormal vector
-        // 4. Translate the circle "stamp" to the current vertex
-        // 5. Rotate the circle "stamp" to lie in the XY-plane of this coordinate system
-        // 6. Emit these vertices and connect them to the previous "stamp"
-        let mut last_v = Vector3::new(0.0, 0.0, 0.0);
-
-        for center_index in 0..line.get_number_of_vertices() {
-            let (neighbor_l_index, neighbor_r_index) = line.get_neighboring_indices_wrapped(center_index);
-
-            let center = line.get_vertices()[center_index];
-            let neighbor_l = line.get_vertices()[neighbor_l_index];
-            let neighbor_r = line.get_vertices()[neighbor_r_index];
-
-            let v1 = (neighbor_l - center).normalize(); // Vector that points towards the left neighbor
-            let v2 = (neighbor_r - center).normalize(); // Vector that points towards the right neighbor
-
-            // Calculate the tangent vector at the current point along the polyline
-            let tangent = if (v2 - v1).magnitude2() > 0.0 {
-                (v2 - v1).normalize()
-            } else {
-                -v1
-            };
-
-
-
-            let t_n = tangent;
-
-            let u_n = if center_index == 0 {
-                Vector3::new(0.0, 0.0, 1.0)
-            } else {
-                (t_n.cross(last_v)).normalize()
-            };
-
-            let v_n = (u_n.cross(t_n)).normalize();
-
-
-
-
-            for (index, point) in circle_vertices.iter().enumerate() {
-                // TODO: this could be done with a single `Matrix4`
-
-                // Align vector `v1` (the circle normal) with `v2` (the tangent):
-                //
-                // 1. Calculate the cross product of `v1` and `v2`: `vc`
-                // 2. Calculate the angle between `v1` and `v2`
-                // 3. Construct an "axis-angle" rotation matrix using `vc` and `angle`
-//                let cross_product = circle_normal.cross(tangent).normalize();
-//                let mut theta = (circle_normal.dot(tangent)).acos();
-//
-//                let mut axis_angle = Matrix3::from_axis_angle(cross_product, cgmath::Rad(theta));
-//
-//                let transformed_point = (axis_angle * point) + center;
-//
-//                tube_vertices.push(transformed_point);
-
-                let theta = 2.0 * 3.1415926 * (index as f32 / number_of_segments as f32);
-                let x = circle_radius * theta.cos();
-                let y = circle_radius * theta.sin();
-                tube_vertices.push(u_n * x + v_n * y + center);
-            }
-
-            if center_index > 0 {
-                // Connect to previous "stamp"
-            }
-
-
-            last_v = v_n;
-
-
-
-        }
-
-        let mut triangles = vec![];
-
-        for ring_index in 0..((tube_vertices.len() / number_of_segments) - 1) {
-            for local_index in 0..(number_of_segments ) {
-                // Vertices are laid out in "rings" of `number_of_segments` vertices like
-                // so (for `number_of_segments = 6`):
-                //
-                // 6  7  8  9  ...
-                //
-                // 0  1  2  3  4  5
-                let next_index = (local_index + 1) % number_of_segments;
-
-                // First triangle: 0 -> 6 -> 7
-                triangles.push(tube_vertices[(ring_index + 0) * number_of_segments + (local_index + 0)]);
-                triangles.push(tube_vertices[(ring_index + 1) * number_of_segments + (local_index + 0)]); // The next ring
-                triangles.push(tube_vertices[(ring_index + 1) * number_of_segments + next_index]); // The next ring
-
-                // Second triangle: 0 -> 7 -> 1
-                triangles.push(tube_vertices[(ring_index + 0) * number_of_segments + (local_index + 0)]);
-                triangles.push(tube_vertices[(ring_index + 1) * number_of_segments + next_index]); // The next ring
-                triangles.push(tube_vertices[(ring_index + 0) * number_of_segments + next_index]);
-            }
-        }
-
-        self.tube_cache.set_positions(&triangles);
+        let vertices = line.generate_tube(0.35, 6);
+        self.tube_cache.set_positions(&vertices);
         self.tube_cache.draw(gl::TRIANGLES);
     }
 }

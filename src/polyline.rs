@@ -50,7 +50,8 @@ impl Segment {
         self.a + d * t
     }
 
-    /// Returns the shortest distance between this segment and `other`.
+    /// Returns a vector that represents the shortest distance between
+    /// this segment and `other`.
     ///
     /// Reference: `http://geomalgorithms.com/a07-_distance.html#dist3D_Segment_to_Segment`
     pub fn shortest_distance_between(&self, other: &Segment) -> Vector3<f32> {
@@ -123,7 +124,7 @@ impl Segment {
                 sN = sD;
             }
             else {
-                sN = (-d +  b);
+                sN = -d +  b;
                 sD = a;
             }
         }
@@ -142,9 +143,6 @@ impl Segment {
 
         // Get the vector difference of the two closest points
         let vector_between_closest_points = w + (sc * u) - (tc * v);  // = self(sc) - other(tc)
-
-        //println!("Closest point on first segment: {:?}", self.a + sc * u);
-        //println!("Closest point on second segment: {:?}", other.a + tc * v);
 
         vector_between_closest_points
     }
@@ -187,6 +185,7 @@ impl Polyline {
         (neighbor_l_index, neighbor_r_index)
     }
 
+    /// Effectively "clears" this polyline and sets its vertices to `vertices`.
     pub fn set_vertices(&mut self, vertices: &Vec<Vector3<f32>>) {
         self.vertices = vertices.clone();
     }
@@ -206,6 +205,9 @@ impl Polyline {
         self.vertices.len()
     }
 
+    /// Returns the point at `t` along this polyline, where a value of `0.0`
+    /// corresponds to the first vertex and a value of `1.0` corresponds
+    /// to the last vertex.
     pub fn point_at(&self, t: f32) -> Vector3<f32> {
         assert!(t >= 0.0 && t <= 1.0);
 
@@ -218,8 +220,9 @@ impl Polyline {
             traversed += segment.length();
 
             if traversed >= desired_length {
-                // We know that the point lies on this segment somewhere...
-                // o ----- o -x---- o ------ o
+                // We know that the point lies on this segment somewhere
+                // ...
+
                 let along_segment = traversed - desired_length;
 
                 point = segment.point_at((segment.length() - along_segment) / segment.length());
@@ -229,6 +232,8 @@ impl Polyline {
         point
     }
 
+    /// Returns the total length of this polyline (i.e. the sum of the lengths
+    /// of all of its segments).
     pub fn length(&self) -> f32 {
         let mut total = 0.0;
 
@@ -241,9 +246,8 @@ impl Polyline {
 
     /// Returns the line segment between vertex `index` and `index + 1`.
     pub fn get_segment(&self, index: usize) -> Segment {
-        Segment::new(
-            &self.vertices[(index + 0)],// % self.vertices.len()],
-            &self.vertices[(index + 1)])// % self.vertices.len()])
+        Segment::new(&self.vertices[(index + 0)],
+                     &self.vertices[(index + 1)])
     }
 
     /// Returns the average length of the line segments that make up this
@@ -290,6 +294,99 @@ impl Polyline {
         }
 
         refined
+    }
+
+    /// Performs a path guided extrusion along the polyline. The extrusion will be made
+    /// with a circular "stamp" with radius `radius` and resolution `number_of_segments`.
+    ///
+    /// References:
+    /// `https://github.com/openframeworks/openFrameworks/blob/master/libs/openFrameworks/graphics/ofPolyline.inl#L1069`
+    /// `https://stackoverflow.com/questions/5088275/opengl-tube-along-a-path`
+    ///
+    /// Thesis (section `4.2`): `https://knotplot.com/thesis/thesis_letter.pdf`
+    pub fn generate_tube(&self, radius: f32, number_of_segments: usize) -> Vec<Vector3<f32>> {
+        let circle_normal = Vector3::new(0.0, 1.0, 0.0);
+        let circle_center = Vector3::new(0.0, 0.0, 0.0);
+        let mut tube_vertices = vec![];
+
+        // Then, at each vertex of the polyline, do the following:
+        //
+        // 1. Calculate the tangent vector
+        // 2. Calculate the normal vector
+        // 3. Use (1) and (2) to calculate the binormal vector
+        // 4. Translate the circle "stamp" to the current vertex
+        // 5. Rotate the circle "stamp" to lie in the XY-plane of this coordinate system
+        // 6. Emit these vertices and connect them to the previous "stamp"
+        let mut last_v = Vector3::new(0.0, 0.0, 0.0);
+
+        for center_index in 0..self.get_number_of_vertices() {
+            let (neighbor_l_index, neighbor_r_index) = self.get_neighboring_indices_wrapped(center_index);
+
+            let center = self.get_vertices()[center_index];
+            let neighbor_l = self.get_vertices()[neighbor_l_index];
+            let neighbor_r = self.get_vertices()[neighbor_r_index];
+
+            let v1 = (neighbor_l - center).normalize(); // Vector that points towards the left neighbor
+            let v2 = (neighbor_r - center).normalize(); // Vector that points towards the right neighbor
+
+            // Calculate the tangent vector at the current point along the polyline
+            let tangent = if (v2 - v1).magnitude2() > 0.0 {
+                (v2 - v1).normalize()
+            } else {
+                -v1
+            };
+
+            let t_n = tangent;
+
+            let u_n = if center_index == 0 {
+                Vector3::new(0.0, 0.0, 1.0)
+            } else {
+                (t_n.cross(last_v)).normalize()
+            };
+
+            let v_n = (u_n.cross(t_n)).normalize();
+
+            for index in 0..number_of_segments {
+                let theta = 2.0 * 3.1415926 * (index as f32 / number_of_segments as f32);
+                let x = radius * theta.cos();
+                let y = radius * theta.sin();
+                tube_vertices.push(u_n * x + v_n * y + center);
+            }
+
+            if center_index > 0 {
+                // Connect to previous "stamp"
+            }
+
+            last_v = v_n;
+        }
+
+        let mut triangles = vec![];
+
+        let number_of_rings = tube_vertices.len() / number_of_segments;
+        for ring_index in 0..number_of_rings {
+            let next_ring_index = (ring_index + 1) % number_of_rings;
+            for local_index in 0..number_of_segments {
+                // Vertices are laid out in "rings" of `number_of_segments` vertices like
+                // so (for `number_of_segments = 6`):
+                //
+                // 6  7  8  9  ...
+                //
+                // 0  1  2  3  4  5
+                let next_local_index = (local_index + 1) % number_of_segments;
+
+                // First triangle: 0 -> 6 -> 7
+                triangles.push(tube_vertices[(ring_index + 0) * number_of_segments + (local_index + 0)]);
+                triangles.push(tube_vertices[next_ring_index * number_of_segments + (local_index + 0)]); // The next ring
+                triangles.push(tube_vertices[next_ring_index * number_of_segments + next_local_index]); // The next ring
+
+                // Second triangle: 0 -> 7 -> 1
+                triangles.push(tube_vertices[(ring_index + 0) * number_of_segments + (local_index + 0)]);
+                triangles.push(tube_vertices[next_ring_index * number_of_segments + next_local_index]); // The next ring
+                triangles.push(tube_vertices[(ring_index + 0) * number_of_segments + next_local_index]);
+            }
+        }
+
+        triangles
     }
 
     /// Returns an AABB that encloses this polyline.

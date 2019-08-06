@@ -18,23 +18,10 @@ pub struct Spring {
     d: f32,
 }
 
-fn calculate_spring_force(spring_a: &Vector3<f32>, spring_b: &Vector3<f32>, k: f32, d: f32) -> Vector3<f32> {
-    let mut direction = spring_a - spring_b;
-    let distance = direction.magnitude();
-    let force = Vector3::zero();
-
-    // Avoid division by zero
-    if distance.abs() < constants::EPSILON {
-        return force;
-    }
-
-    // Hooke's law: `F = -k * (x - d)`
-    direction = direction.normalize();
-    direction * -k * (distance - d)
-}
-
 /// A struct representing a knot, which is a polyline embedded in 3-dimensional space
-/// with a particular set of over- / under-crossings.
+/// with a particular set of over- / under-crossings. In this program, a "knot" also
+/// refers to a dynamical model, where the underlying polyline is treated as a mass-spring
+/// system.
 pub struct Knot {
     // The "rope" (polygonal line segment) that is knotted
     rope: Polyline,
@@ -75,6 +62,8 @@ impl Knot {
         &self.rope
     }
 
+    /// Performs a pseudo-physical form of topological refinement, based on spring
+    /// physics.
     pub fn relax(&mut self) {
         // The (average?) length of each line segment ("stick"), prior to relaxation
         let starting_length = 0.5;

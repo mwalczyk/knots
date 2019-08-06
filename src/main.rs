@@ -51,7 +51,6 @@ fn set_draw_state() {
         gl::LineWidth(1.0);
         gl::PointSize(4.0);
         gl::Enable(gl::DEPTH_TEST);
-
         gl::DepthFunc(gl::LESS);
         gl::Disable(gl::CULL_FACE);
     }
@@ -175,9 +174,9 @@ fn main() {
         draw_program.uniform_matrix_4f("u_projection", &projection);
         //renderer.draw_polyline(knot.get_rope());
 
-        if frame_count < 100 {
+        //if frame_count < 100 {
             knot.relax();
-        }
+        //}
 
         renderer.draw_tube(knot.get_rope());
 

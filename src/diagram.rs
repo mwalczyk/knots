@@ -85,15 +85,19 @@ impl Diagram {
         column
     }
 
+    /// Converts a pair of grid indices `<i, j>`, each of which lies in the range
+    /// `[0..self.resolution]`, to an "absolute" index, ranging from `[0..self.resolution^2]`.
     fn convert_to_absolute_index(&self, i: usize, j: usize) -> usize {
         i + j * self.resolution
     }
 
+    /// Converts an "absolute index" in the range `[0..self.resolution^2]` to a
+    /// pair of grid indices `<i, j>`, each of which lies in the range `[0..self.resolution]`.
     fn convert_to_grid_indices(&self, absolute_index: usize) -> (usize, usize) {
         (absolute_index % self.resolution, absolute_index / self.resolution)
     }
 
-    /// Generates the knot corresponding to this grid diagram.
+    /// Generates a knot corresponding to this grid diagram.
     pub fn generate_knot(&self) -> Knot {
         // We begin traversing the knot at the first column...
         // "Start", (relative) index of the `x` in the first column (there will always be one)
@@ -168,6 +172,7 @@ impl Diagram {
         // add additional vertex (or vertices) to any column that contains a intersection(s)
         // and "lift" this vertex (or vertices) along the z-axis
         let mut lifted = vec![];
+
         for col_chunk in cols.chunks(2) {
             let (mut col_s, mut col_e) = (col_chunk[0], col_chunk[1]);
 
@@ -235,20 +240,30 @@ impl Diagram {
         // `[1, 4, 28, 27, 26, 8, 7, 6, 18, 20, 21, 33, 35, 17, 16, 14, 13, 1]`
 
         // Convert indices to actual 3D positions so that we can
-        // (eventually) draw a polyline corresponding to this knot
+        // (eventually) draw a polyline corresponding to this knot: the
+        // world-space width and height of the 3D grid are automatically
+        // set to the resolution of the diagram so that each grid "cell"
+        // is unit width / height
         let mut path = Polyline::new();
         let w = self.resolution as f32;
         let h = self.resolution as f32;
+
+        // This value is somewhat arbitrary but should *probably* match
+        // the tube radius used later on in the rendering loop...
+        let lift_amount = 0.1;
+
         for absolute_index in knot_topology.iter() {
-            // `i` is the row `[0..self.resolution]`
-            // `j` is the col `[0..self.resolution]`
+            // Remember:
+            // `i` is the row, ranging from `[0..self.resolution]`
+            // `j` is the col, ranging from `[0..self.resolution]`
             let (i, j) = self.convert_to_grid_indices(*absolute_index);
 
-            // World-space position of the vertex corresponding to this grid index
+            // World-space position of the vertex corresponding to this grid index:
+            // make sure that the center of the grid lies at the origin
             let x = (j as f32 / self.resolution as f32) * w - 0.5 * w;
             let y = h - (i as f32 / self.resolution as f32) * h - 0.5 * h;
             let z = if lifted.contains(absolute_index) {
-                0.1
+                lift_amount
             } else {
                 0.0
             };
