@@ -11,7 +11,7 @@ out VS_OUT
 uniform mat4 u_model;
 uniform mat4 u_view;
 uniform mat4 u_projection;
-uniform float u_number_of_beads = 81.0; // TODO
+uniform float u_number_of_beads = 36.0; // TODO
 
 vec3 hsv_to_rgb(vec3 c)
 {

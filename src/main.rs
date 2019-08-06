@@ -7,6 +7,8 @@
 #![allow(unreachable_patterns)]
 #![allow(non_snake_case)]
 
+#![feature(clamp)]
+
 // Should be able to do this, but the Intellij plugin doesn't support it yet...
 //mod gl { include!(concat!(env!("OUT_DIR"), "/bindings.rs")); }
 //mod gl { include!("../target/debug/build/gl-c987f7e774ed107e/out/bindings.rs"); }
@@ -49,6 +51,9 @@ fn set_draw_state() {
         gl::LineWidth(1.0);
         gl::PointSize(4.0);
         gl::Enable(gl::DEPTH_TEST);
+
+        gl::DepthFunc(gl::LESS);
+        gl::Disable(gl::CULL_FACE);
     }
 }
 
@@ -98,6 +103,8 @@ fn main() {
     // Turn on depth testing, etc.
     set_draw_state();
 
+    let mut frame_count = 0;
+
     loop {
         events_loop.poll_events(|event| match event {
             glutin::Event::WindowEvent { event, .. } => match event {
@@ -144,6 +151,7 @@ fn main() {
                             glutin::ElementState::Pressed => match key {
                                 glutin::VirtualKeyCode::R => {
                                     knot.reset();
+                                    frame_count = 0;
                                 },
                                 glutin::VirtualKeyCode::S => {
                                    // knot.relax();
@@ -165,10 +173,16 @@ fn main() {
         draw_program.uniform_matrix_4f("u_model", &model);
         draw_program.uniform_matrix_4f("u_view", &view);
         draw_program.uniform_matrix_4f("u_projection", &projection);
-        renderer.draw_polyline(knot.get_rope());
-        //knot.relax();
+        //renderer.draw_polyline(knot.get_rope());
+
+        if frame_count < 100 {
+            knot.relax();
+        }
+
         renderer.draw_tube(knot.get_rope());
 
         gl_window.swap_buffers().unwrap();
+
+        frame_count += 1;
     }
 }
