@@ -1,9 +1,9 @@
+use crate::knot::Knot;
+use crate::polyline::Polyline;
 use cgmath::Vector3;
 use std::ffi::OsStr;
 use std::io;
-use crate::knot::Knot;
 use std::path::Path;
-use crate::polyline::Polyline;
 
 /// Reference: `https://www.math.ucdavis.edu/~slwitte/research/BlackwellTapiaPoster.pdf`
 enum CromwellMove {
@@ -13,6 +13,10 @@ enum CromwellMove {
     Destabilization,
 }
 
+trait KnotGenerator {
+    fn generate(&self) -> Knot;
+}
+
 /// A struct representing a grid diagram corresponding to a particular knot invariant (or
 /// the unknot).
 pub struct Diagram {
@@ -20,7 +24,7 @@ pub struct Diagram {
     resolution: usize,
 
     // The grid data (i.e. a 2D array of x's, o's, and blank cells)
-    data: Vec<Vec<char>>
+    data: Vec<Vec<char>>,
 }
 
 impl Diagram {
@@ -32,23 +36,30 @@ impl Diagram {
 
         let mut resolution = 0;
         let mut data: Vec<Vec<char>> = vec![];
-        let mut reader = csv::ReaderBuilder::new().has_headers(false).from_path(path).unwrap();
+        let mut reader = csv::ReaderBuilder::new()
+            .has_headers(false)
+            .from_path(path)
+            .unwrap();
+        let mut number_of_records = 0;
 
         for result in reader.records() {
             let record = result.unwrap();
             resolution = record.len();
+            number_of_records += 1;
+
+            // Push this row of data
             data.push(record.as_slice().chars().collect());
         }
 
-        // TODO: verify that the grid is square
+        // Verify that the grid is square
+        if resolution != number_of_records {
+            panic!("Provided grid file is not square: the number of rows should equal the number of columns");
+        }
 
-        println!("Returning {}x{} grid:", resolution, resolution);
+        println!("Building a {}x{} diagram:", resolution, resolution);
 
-        let diagram = Diagram {
-            resolution,
-            data
-        };
-        // TODO: diagram.validate();
+        let diagram = Diagram { resolution, data };
+        diagram.validate();
         diagram
     }
 
@@ -60,13 +71,27 @@ impl Diagram {
     /// Validates the grid diagram, ensuring that there is only one `x` and one `o`
     /// per column and row.
     fn validate(&self) {
-        unimplemented!()
+        for index in 0..self.resolution {
+            let current_row = self.get_row(index);
+            let current_col = self.get_column(index);
+
+            if current_row.iter().collect::<String>().matches('x').count() != 1
+                || current_row.iter().collect::<String>().matches('o').count() != 1
+                || current_col.iter().collect::<String>().matches('x').count() != 1
+                || current_col.iter().collect::<String>().matches('o').count() != 1
+            {
+                panic!("Invalid grid diagram: ensure that each column / row contains exactly one `x` and one `o`");
+                break;
+            }
+        }
     }
 
+    /// Returns the resolution of this grid diagram (i.e. the number of rows or number of columns).
     pub fn get_resolution(&self) -> usize {
         self.resolution
     }
 
+    /// Returns a reference to this grid diagram's internal data store.
     pub fn get_data(&self) -> &Vec<Vec<char>> {
         &self.data
     }
@@ -94,16 +119,29 @@ impl Diagram {
     /// Converts an "absolute index" in the range `[0..self.resolution^2]` to a
     /// pair of grid indices `<i, j>`, each of which lies in the range `[0..self.resolution]`.
     fn convert_to_grid_indices(&self, absolute_index: usize) -> (usize, usize) {
-        (absolute_index % self.resolution, absolute_index / self.resolution)
+        (
+            absolute_index % self.resolution,
+            absolute_index / self.resolution,
+        )
     }
 
     /// Generates a knot corresponding to this grid diagram.
     pub fn generate_knot(&self) -> Knot {
-        // We begin traversing the knot at the first column...
-        // "Start", (relative) index of the `x` in the first column (there will always be one)
-        // "End", (relative) index of the `o` in the first column (there will always be one)
-        let mut s = self.get_column(0).iter().collect::<String>().find('x').unwrap();
-        let mut e = self.get_column(0).iter().collect::<String>().find('o').unwrap();
+        // We begin traversing the knot at the first column:
+        // `s` = "Start", (relative) index of the `x` in the first column (there will always be one)
+        // `e` = "End", (relative) index of the `o` in the first column (there will always be one)
+        let mut s = self
+            .get_column(0)
+            .iter()
+            .collect::<String>()
+            .find('x')
+            .unwrap();
+        let mut e = self
+            .get_column(0)
+            .iter()
+            .collect::<String>()
+            .find('o')
+            .unwrap();
         let tie = s;
 
         let mut knot_topology = vec![
@@ -161,7 +199,10 @@ impl Diagram {
         let mut cols = knot_topology.clone();
         rows.remove(0);
         cols.pop();
-        println!("Knot topology (before inserting any crossings): {:?}", knot_topology);
+        println!(
+            "Knot topology (before inserting any crossings): {:?}",
+            knot_topology
+        );
 
         // This should always be true, i.e. for a 6x6 grid there should be 6 pairs of x's and o's (12
         // indices total)...note that we perform this check before checking for any crossings, which
@@ -203,7 +244,6 @@ impl Diagram {
                 let (re_i, re_j) = self.convert_to_grid_indices(row_e);
 
                 if cs_j > rs_j && cs_j < re_j && cs_i < rs_i && ce_i > rs_i {
-
                     let intersect = self.convert_to_absolute_index(rs_i, cs_j);
                     intersections.push((rs_i, intersect));
                     lifted.push(intersect);
@@ -219,10 +259,13 @@ impl Diagram {
                 intersections.reverse();
             }
 
-            println!("Intersections found for column #{}: {:?}", self.convert_to_grid_indices(col_s).1, intersections);
+            println!(
+                "Intersections found for column #{}: {:?}",
+                self.convert_to_grid_indices(col_s).1,
+                intersections
+            );
 
             for (index, node) in knot_topology.iter().enumerate() {
-
                 // If we have arrived at either the start or end of the column, begin insertion
                 if *node == col_s || *node == col_e {
                     for (_, ix) in intersections.iter() {

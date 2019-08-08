@@ -1,5 +1,5 @@
-use cgmath::{EuclideanSpace, InnerSpace, Matrix3, Point3, Vector2, Vector3, Zero};
 use crate::polyline::Polyline;
+use cgmath::{EuclideanSpace, InnerSpace, Matrix3, Point3, Vector2, Vector3, Zero};
 use gl;
 use gl::types::*;
 use std::mem;
@@ -48,11 +48,12 @@ pub struct Mesh {
 }
 
 impl Mesh {
-    pub fn new(positions: &Vec<Vector3<f32>>,
-               colors: Option<&Vec<Vector3<f32>>>,
-               normals: Option<&Vec<Vector3<f32>>>,
-               texcoords: Option<&Vec<Vector2<f32>>>) -> Mesh {
-
+    pub fn new(
+        positions: &Vec<Vector3<f32>>,
+        colors: Option<&Vec<Vector3<f32>>>,
+        normals: Option<&Vec<Vector3<f32>>>,
+        texcoords: Option<&Vec<Vector2<f32>>>,
+    ) -> Mesh {
         let mut mesh = Mesh {
             vao: 0,
             vbo: 0,
@@ -94,14 +95,7 @@ impl Mesh {
             // colors -> 3 floats (r, g, b)
             // normals -> 3 floats (x, y, z)
             // texture coordinates -> 2 floats (u, v)
-            gl::VertexArrayAttribFormat(
-                self.vao,
-                ATTRIBUTE_POSITION,
-                3,
-                gl::FLOAT,
-                gl::FALSE,
-                0,
-            );
+            gl::VertexArrayAttribFormat(self.vao, ATTRIBUTE_POSITION, 3, gl::FLOAT, gl::FALSE, 0);
             gl::VertexArrayAttribBinding(self.vao, ATTRIBUTE_POSITION, BINDING_POSITION);
 
             let mut total_size = mem::size_of::<Vector3<f32>>() * self.positions.len();
@@ -120,14 +114,28 @@ impl Mesh {
                 assert_eq!(self.positions.len(), normals.len());
                 total_size += mem::size_of::<Vector3<f32>>() * normals.len();
                 actual_stride += mem::size_of::<Vector3<f32>>();
-                gl::VertexArrayAttribFormat(self.vao, ATTRIBUTE_NORMALS, 3, gl::FLOAT, gl::FALSE, 0);
+                gl::VertexArrayAttribFormat(
+                    self.vao,
+                    ATTRIBUTE_NORMALS,
+                    3,
+                    gl::FLOAT,
+                    gl::FALSE,
+                    0,
+                );
                 gl::VertexArrayAttribBinding(self.vao, ATTRIBUTE_NORMALS, BINDING_NORMALS);
             }
             if let Some(texcoords) = &self.texcoords {
                 assert_eq!(self.positions.len(), texcoords.len());
                 total_size += mem::size_of::<Vector2<f32>>() * texcoords.len();
                 actual_stride += mem::size_of::<Vector2<f32>>();
-                gl::VertexArrayAttribFormat(self.vao, ATTRIBUTE_TEXCOORDS, 2, gl::FLOAT, gl::FALSE, 0);
+                gl::VertexArrayAttribFormat(
+                    self.vao,
+                    ATTRIBUTE_TEXCOORDS,
+                    2,
+                    gl::FLOAT,
+                    gl::FALSE,
+                    0,
+                );
                 gl::VertexArrayAttribBinding(self.vao, ATTRIBUTE_TEXCOORDS, BINDING_TEXCOORDS);
             }
 
@@ -147,7 +155,7 @@ impl Mesh {
                 0, // Binding index
                 self.vbo,
                 0, // Offset
-                actual_stride as i32
+                actual_stride as i32,
             );
         }
     }
@@ -158,16 +166,29 @@ impl Mesh {
         self.vertex_data = vec![];
 
         for index in 0..self.positions.len() {
-            self.vertex_data.extend_from_slice(&[self.positions[index].x, self.positions[index].y, self.positions[index].z]);
+            self.vertex_data.extend_from_slice(&[
+                self.positions[index].x,
+                self.positions[index].y,
+                self.positions[index].z,
+            ]);
 
             if let Some(colors) = &self.colors {
-                self.vertex_data.extend_from_slice(&[colors[index].x, colors[index].y, colors[index].z]);
+                self.vertex_data.extend_from_slice(&[
+                    colors[index].x,
+                    colors[index].y,
+                    colors[index].z,
+                ]);
             }
             if let Some(normals) = &self.normals {
-                self.vertex_data.extend_from_slice(&[normals[index].x, normals[index].y, normals[index].z]);
+                self.vertex_data.extend_from_slice(&[
+                    normals[index].x,
+                    normals[index].y,
+                    normals[index].z,
+                ]);
             }
             if let Some(texcoords) = &self.texcoords {
-                self.vertex_data.extend_from_slice(&[texcoords[index].x, texcoords[index].y]);
+                self.vertex_data
+                    .extend_from_slice(&[texcoords[index].x, texcoords[index].y]);
             }
         }
     }
@@ -206,7 +227,12 @@ impl Mesh {
         let size = (self.vertex_data.len() * (mem::size_of::<f32>() as usize)) as GLsizeiptr;
 
         unsafe {
-            gl::NamedBufferSubData(self.vbo, 0, size, self.vertex_data.as_ptr() as *const GLvoid);
+            gl::NamedBufferSubData(
+                self.vbo,
+                0,
+                size,
+                self.vertex_data.as_ptr() as *const GLvoid,
+            );
         }
     }
 }
@@ -221,7 +247,6 @@ pub struct Renderer {
     // TODO: do we need more than one mesh? Do we even need this struct?
     polyline_cache: Mesh,
     tube_cache: Mesh,
-
     // See: `https://github.com/openframeworks/openFrameworks/blob/master/libs/openFrameworks/gl/ofGLProgrammableRenderer.h#L241`
     //
     // circle_mesh: Mesh,
@@ -236,7 +261,7 @@ pub struct Renderer {
 
 impl Renderer {
     pub fn new() -> Renderer {
-        let renderer = Renderer{
+        let renderer = Renderer {
             polyline_cache: Mesh::new(&vec![], None, None, None),
             tube_cache: Mesh::new(&vec![], None, None, None),
         };
@@ -267,8 +292,9 @@ impl Renderer {
     }
 
     pub fn draw_tube(&mut self, line: &Polyline) {
-        let vertices = line.generate_tube(0.35, 6);
+        let vertices = line.generate_tube(0.5, 6);
         self.tube_cache.set_positions(&vertices);
         self.tube_cache.draw(gl::TRIANGLES);
+        self.tube_cache.draw(gl::POINTS);
     }
 }

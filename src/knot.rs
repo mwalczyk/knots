@@ -1,9 +1,9 @@
-use cgmath::{InnerSpace, Vector3, Zero};
 use crate::constants;
 use crate::polyline::{Polyline, Segment};
+use cgmath::{InnerSpace, Vector3, Zero};
 
 pub trait Notation {
-
+    fn generate(&self) -> &str;
 }
 
 pub enum Crossing {
@@ -12,10 +12,29 @@ pub enum Crossing {
     Neither,
 }
 
-pub struct Spring {
-    segment: Segment,
-    k: f32,
-    d: f32,
+pub struct Stick<'a> {
+    a: &'a Bead,
+    b: &'a Bead,
+    //k: f32,
+    //d: f32,
+}
+
+pub struct Bead {
+    p: Vector3<f32>,
+    v: Vector3<f32>,
+    a: Vector3<f32>,
+    index: usize,
+}
+
+impl Bead {
+    fn new(position: &Vector3<f32>, index: usize) -> Bead {
+        Bead {
+            p: *position,
+            v: Vector3::zero(),
+            a: Vector3::zero(),
+            index,
+        }
+    }
 }
 
 /// A struct representing a knot, which is a polyline embedded in 3-dimensional space
@@ -37,6 +56,8 @@ pub struct Knot {
 
     // Accelerations
     a: Vec<Vector3<f32>>,
+
+    beads: Vec<Bead>,
 }
 
 impl Knot {
@@ -47,14 +68,23 @@ impl Knot {
         let v = vec![Vector3::zero(); rope.get_number_of_vertices()];
         let a = vec![Vector3::zero(); rope.get_number_of_vertices()];
 
+        let mut beads = vec![];
+        for (index, position) in rope.get_vertices().iter().enumerate() {
+            beads.push(Bead::new(position, index));
+        }
+
         let knot = Knot {
             rope: rope.clone(),
             anchors,
             p,
             v,
-            a
+            a,
+            beads,
         };
-        println!("Building knot with average segment length: {}", knot.rope.get_average_segment_length());
+        println!(
+            "Building knot with average segment length: {}",
+            knot.rope.get_average_segment_length()
+        );
         knot
     }
 
@@ -89,7 +119,8 @@ impl Knot {
             let mut force = Vector3::zero();
 
             // Get the indices of the left and right neighbors
-            let (neighbor_l_index, neighbor_r_index) = self.rope.get_neighboring_indices_wrapped(center_index);
+            let (neighbor_l_index, neighbor_r_index) =
+                self.rope.get_neighboring_indices_wrapped(center_index);
 
             // The "center" (i.e. current) bead
             let center = self.p[center_index];
@@ -103,7 +134,7 @@ impl Knot {
                     // Grab the "other" bead, which may or may not be a neighbor to "center"
                     let other = self.p[other_index];
 
-                    if other_index == neighbor_l_index  || other_index == neighbor_r_index {
+                    if other_index == neighbor_l_index || other_index == neighbor_r_index {
                         // This is a neighboring bead: calculate the (attractive) mechanical spring force that
                         // will pull this bead towards `other`
                         let mut direction = other - center;
@@ -165,37 +196,37 @@ impl Knot {
 
             // TODO: if moving this vertex is illegal, reset its position to `old`
             // Apply repulsive force away from neighboring segments
-//            let mut repulsion = Vector3::new(0.0, 0.0, 0.0);
-//            let mut number_of_interactions = 0;
+            //            let mut repulsion = Vector3::new(0.0, 0.0, 0.0);
+            //            let mut number_of_interactions = 0;
 
             // Don't worry about the last (wrapped) segment for now...
-//            if index > 0 && index < (self.rope.get_number_of_vertices() - 1) && false {
-//
-//                let segment_a = self.rope.get_segment(index);
-//
-//                for j in 0..self.rope.get_number_of_vertices() - 1 {
-//
-//                    // Don't test the current segment against itself or its immediate neighbors
-//                    if j != index && j != (index - 1) && j != (index + 1)
-//                    {
-//                        let segment_b = self.rope.get_segment(j);
-//
-//                        let vector_between = segment_a.shortest_distance_between(&segment_b);
-//                        if vector_between.magnitude() <= d_close {
-//                            self.p[index] = old;
-//
-//                            //println!("Segment {} is too close to segment {}, with distance: {}", index, j, vector_between.magnitude());
-//                            // Push segment A away from segment B: `to - from`
-//                            //repulsion += vector_between;
-//                            //number_of_interactions += 1;
-//                        }
-//
-//                    }
-//                }
-//            }
-//            if number_of_interactions >= 1 {
-//                force += (repulsion / number_of_interactions as f32);
-//            }
+            //            if index > 0 && index < (self.rope.get_number_of_vertices() - 1) && false {
+            //
+            //                let segment_a = self.rope.get_segment(index);
+            //
+            //                for j in 0..self.rope.get_number_of_vertices() - 1 {
+            //
+            //                    // Don't test the current segment against itself or its immediate neighbors
+            //                    if j != index && j != (index - 1) && j != (index + 1)
+            //                    {
+            //                        let segment_b = self.rope.get_segment(j);
+            //
+            //                        let vector_between = segment_a.shortest_distance_between(&segment_b);
+            //                        if vector_between.magnitude() <= d_close {
+            //                            self.p[index] = old;
+            //
+            //                            //println!("Segment {} is too close to segment {}, with distance: {}", index, j, vector_between.magnitude());
+            //                            // Push segment A away from segment B: `to - from`
+            //                            //repulsion += vector_between;
+            //                            //number_of_interactions += 1;
+            //                        }
+            //
+            //                    }
+            //                }
+            //            }
+            //            if number_of_interactions >= 1 {
+            //                force += (repulsion / number_of_interactions as f32);
+            //            }
         }
 
         // Set new positions
@@ -210,11 +241,19 @@ impl Knot {
         self.a = vec![Vector3::zero(); self.rope.get_number_of_vertices()];
     }
 
-    pub fn find_crossings(&self) { unimplemented!() }
+    pub fn find_crossings(&self) {
+        unimplemented!()
+    }
 
-    pub fn get_number_of_crossings(&self) { unimplemented!() }
+    pub fn get_number_of_crossings(&self) {
+        unimplemented!()
+    }
 
-    pub fn get_dowker_notation(&self) { unimplemented!() }
+    pub fn get_dowker_notation(&self) {
+        unimplemented!()
+    }
 
-    pub fn get_conway_notation(&self) { unimplemented!() }
+    pub fn get_conway_notation(&self) {
+        unimplemented!()
+    }
 }

@@ -1,5 +1,6 @@
-use cgmath::{EuclideanSpace, InnerSpace, Point3, Vector3, Zero};
 use crate::constants;
+use cgmath::{EuclideanSpace, InnerSpace, Point3, Vector3, Zero};
+use noise::{NoiseFn, Perlin};
 use std::cmp::max;
 
 /// A point of intersection along with scalar `s` and `t` values.
@@ -12,10 +13,7 @@ pub struct Segment {
 
 impl Segment {
     pub fn new(a: &Vector3<f32>, b: &Vector3<f32>) -> Segment {
-        Segment {
-            a: *a,
-            b: *b,
-        }
+        Segment { a: *a, b: *b }
     }
 
     /// Returns the first endpoint of this line segment.
@@ -63,14 +61,14 @@ impl Segment {
         let c = v.dot(v); // always >= 0
         let d = u.dot(w);
         let e = v.dot(w);
-        let D = a*c - b*b; // always >= 0
+        let D = a * c - b * b; // always >= 0
 
         let mut sc: f32 = 0.0;
         let mut sN: f32 = 0.0;
-        let mut sD = D;       // sc = sN / sD, default sD = D >= 0
+        let mut sD = D; // sc = sN / sD, default sD = D >= 0
         let mut tc: f32 = 0.0;
-        let mut tN: f32= 0.0;
-        let mut tD = D;       // tc = tN / tD, default tD = D >= 0
+        let mut tN: f32 = 0.0;
+        let mut tD = D; // tc = tN / tD, default tD = D >= 0
 
         // compute the line parameters of the two closest points
         if D < constants::EPSILON {
@@ -79,8 +77,7 @@ impl Segment {
             sD = 1.0; // to prevent possible division by 0.0 later
             tN = e;
             tD = c;
-        }
-        else {
+        } else {
             // get the closest points on the infinite lines
             sN = b * e - c * d;
             tN = a * e - b * d;
@@ -89,8 +86,7 @@ impl Segment {
                 sN = 0.0;
                 tN = e;
                 tD = c;
-            }
-            else if sN > sD {
+            } else if sN > sD {
                 // sc > 1  => the s = 1 edge is visible
                 sN = sD;
                 tN = e + b;
@@ -104,27 +100,22 @@ impl Segment {
             // Recompute `sc` for this edge
             if -d < 0.0 {
                 sN = 0.0;
-            }
-            else if -d > a {
+            } else if -d > a {
                 sN = sD;
-            }
-            else {
+            } else {
                 sN = -d;
                 sD = a;
             }
-        }
-        else if tN > tD {
+        } else if tN > tD {
             // tc > 1  => the t = 1 edge is visible
             tN = tD;
             // Recompute `sc` for this edge
             if (-d + b) < 0.0 {
                 sN = 0.0;
-            }
-            else if (-d + b) > a {
+            } else if (-d + b) > a {
                 sN = sD;
-            }
-            else {
-                sN = -d +  b;
+            } else {
+                sN = -d + b;
                 sD = a;
             }
         }
@@ -142,7 +133,7 @@ impl Segment {
         };
 
         // Get the vector difference of the two closest points
-        let vector_between_closest_points = w + (sc * u) - (tc * v);  // = self(sc) - other(tc)
+        let vector_between_closest_points = w + (sc * u) - (tc * v); // = self(sc) - other(tc)
 
         vector_between_closest_points
     }
@@ -157,9 +148,7 @@ pub struct Polyline {
 
 impl Polyline {
     pub fn new() -> Polyline {
-        Polyline {
-            vertices: vec![],
-        }
+        Polyline { vertices: vec![] }
     }
 
     pub fn get_vertices(&self) -> &Vec<Vector3<f32>> {
@@ -246,8 +235,7 @@ impl Polyline {
 
     /// Returns the line segment between vertex `index` and `index + 1`.
     pub fn get_segment(&self, index: usize) -> Segment {
-        Segment::new(&self.vertices[(index + 0)],
-                     &self.vertices[(index + 1)])
+        Segment::new(&self.vertices[(index + 0)], &self.vertices[(index + 1)])
     }
 
     /// Returns the average length of the line segments that make up this
@@ -270,7 +258,7 @@ impl Polyline {
     }
 
     /// Reference: `https://github.com/openframeworks/openFrameworks/blob/master/libs/openFrameworks/graphics/ofPolyline.inl#L504`
-    pub fn refine(&mut self, minimum_segment_length: f32)  -> Polyline {
+    pub fn refine(&mut self, minimum_segment_length: f32) -> Polyline {
         let mut refined = Polyline::new();
 
         for index in 0..self.get_number_of_vertices() - 1 {
@@ -304,10 +292,11 @@ impl Polyline {
     /// `https://stackoverflow.com/questions/5088275/opengl-tube-along-a-path`
     ///
     /// Thesis (section `4.2`): `https://knotplot.com/thesis/thesis_letter.pdf`
-    pub fn generate_tube(&self, radius: f32, number_of_segments: usize) -> Vec<Vector3<f32>> {
+    pub fn generate_tube(&self, mut radius: f32, number_of_segments: usize) -> Vec<Vector3<f32>> {
         let circle_normal = Vector3::new(0.0, 1.0, 0.0);
         let circle_center = Vector3::new(0.0, 0.0, 0.0);
         let mut tube_vertices = vec![];
+        let perlin = Perlin::new();
 
         // Then, at each vertex of the polyline, do the following:
         //
@@ -318,11 +307,19 @@ impl Polyline {
         // 5. Rotate the circle "stamp" to lie in the XY-plane of this coordinate system
         // 6. Emit these vertices and connect them to the previous "stamp"
         let mut last_v = Vector3::new(0.0, 0.0, 0.0);
+        let mut finish_loop = false;
 
-        for center_index in 0..self.get_number_of_vertices() {
-            let (neighbor_l_index, neighbor_r_index) = self.get_neighboring_indices_wrapped(center_index);
+        for center_index in 0..=self.get_number_of_vertices() {
 
-            let center = self.get_vertices()[center_index];
+            // TODO: this is some insanely hacky shit...basically, we need the first and
+            //  last tangents to "match up," so we just re-calculate the first ring once
+            //  we reach the end of the loop, using an inclusive range (above)
+            let wrapped_index = center_index % self.get_number_of_vertices();
+
+            let (neighbor_l_index, neighbor_r_index) =
+                self.get_neighboring_indices_wrapped(wrapped_index);
+
+            let center = self.get_vertices()[wrapped_index];
             let neighbor_l = self.get_vertices()[neighbor_l_index];
             let neighbor_r = self.get_vertices()[neighbor_r_index];
 
@@ -338,32 +335,43 @@ impl Polyline {
 
             let t_n = tangent;
 
-            let u_n = if center_index == 0 {
-                Vector3::new(0.0, 0.0, 1.0)
+            let u_n = if wrapped_index == 0 && center_index == 0 {
+                // Find an arbitrary vector perpendicular to the tangent vector
+                let z_axis = Vector3::unit_z();
+                z_axis.cross(t_n)
             } else {
                 (t_n.cross(last_v)).normalize()
             };
 
             let v_n = (u_n.cross(t_n)).normalize();
 
+            // Try modifying the radius along the arc:
+            //radius = (center_index as f32).sin() * 0.5 + 0.5;
+            let scale = 4.5;
+            let seed = ((center_index as f64 / self.get_number_of_vertices() as f64) * std::f64::consts::PI).sin();
+            radius = perlin.get([seed * scale, seed * scale]) as f32 * 0.5 + 0.5;
+
             for index in 0..number_of_segments {
                 let theta = 2.0 * 3.1415926 * (index as f32 / number_of_segments as f32);
                 let x = radius * theta.cos();
                 let y = radius * theta.sin();
-                tube_vertices.push(u_n * x + v_n * y + center);
+                tube_vertices.push(u_n.normalize() * x + v_n.normalize() * y + center);
             }
 
-            if center_index > 0 {
+            if wrapped_index > 0 {
                 // Connect to previous "stamp"
             }
 
             last_v = v_n;
         }
 
+        //let first_ring = tube_vertices[0..number_of_segments].to_vec();
+        //tube_vertices.extend_from_slice(&first_ring);
+
         let mut triangles = vec![];
 
         let number_of_rings = tube_vertices.len() / number_of_segments;
-        for ring_index in 0..number_of_rings {
+        for ring_index in 0..number_of_rings - 1 {
             let next_ring_index = (ring_index + 1) % number_of_rings;
             for local_index in 0..number_of_segments {
                 // Vertices are laid out in "rings" of `number_of_segments` vertices like
@@ -375,14 +383,20 @@ impl Polyline {
                 let next_local_index = (local_index + 1) % number_of_segments;
 
                 // First triangle: 0 -> 6 -> 7
-                triangles.push(tube_vertices[(ring_index + 0) * number_of_segments + (local_index + 0)]);
-                triangles.push(tube_vertices[next_ring_index * number_of_segments + (local_index + 0)]); // The next ring
-                triangles.push(tube_vertices[next_ring_index * number_of_segments + next_local_index]); // The next ring
+                triangles
+                    .push(tube_vertices[(ring_index + 0) * number_of_segments + (local_index + 0)]);
+                triangles
+                    .push(tube_vertices[next_ring_index * number_of_segments + (local_index + 0)]); // The next ring
+                triangles
+                    .push(tube_vertices[next_ring_index * number_of_segments + next_local_index]); // The next ring
 
                 // Second triangle: 0 -> 7 -> 1
-                triangles.push(tube_vertices[(ring_index + 0) * number_of_segments + (local_index + 0)]);
-                triangles.push(tube_vertices[next_ring_index * number_of_segments + next_local_index]); // The next ring
-                triangles.push(tube_vertices[(ring_index + 0) * number_of_segments + next_local_index]);
+                triangles
+                    .push(tube_vertices[(ring_index + 0) * number_of_segments + (local_index + 0)]);
+                triangles
+                    .push(tube_vertices[next_ring_index * number_of_segments + next_local_index]); // The next ring
+                triangles
+                    .push(tube_vertices[(ring_index + 0) * number_of_segments + next_local_index]);
             }
         }
 
@@ -401,7 +415,10 @@ mod tests {
 
     #[test]
     fn test_distance_between_0() {
-        let segment_a = Segment::new(&Vector3::new(-1.0, 1.0, 0.0), &Vector3::new(-1.0, -1.0, 0.0));
+        let segment_a = Segment::new(
+            &Vector3::new(-1.0, 1.0, 0.0),
+            &Vector3::new(-1.0, -1.0, 0.0),
+        );
         let segment_b = Segment::new(&Vector3::new(1.0, 1.0, 0.0), &Vector3::new(1.0, -1.0, 0.0));
 
         let shortest_distance = segment_a.shortest_distance_between(&segment_b);
