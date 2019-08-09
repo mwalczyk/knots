@@ -292,9 +292,9 @@ impl Renderer {
     }
 
     pub fn draw_tube(&mut self, line: &Polyline) {
-        let vertices = line.generate_tube(0.5, 6);
+        let vertices = line.generate_tube(0.5, 12);
         self.tube_cache.set_positions(&vertices);
         self.tube_cache.draw(gl::TRIANGLES);
-        self.tube_cache.draw(gl::POINTS);
+        //self.tube_cache.draw(gl::POINTS);
     }
 }

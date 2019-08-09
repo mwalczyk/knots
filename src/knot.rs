@@ -12,28 +12,94 @@ pub enum Crossing {
     Neither,
 }
 
-pub struct Stick<'a> {
-    a: &'a Bead,
-    b: &'a Bead,
+struct Stick<'a> {
+    start: &'a Bead,
+    end: &'a Bead,
     //k: f32,
     //d: f32,
 }
 
-pub struct Bead {
-    p: Vector3<f32>,
-    v: Vector3<f32>,
-    a: Vector3<f32>,
+#[derive(PartialEq)]
+struct Bead {
+    position: Vector3<f32>,
+    velocity: Vector3<f32>,
+    acceleration: Vector3<f32>,
     index: usize,
+    neighbor_l_index: usize,
+    neighbor_r_index: usize,
+    is_stuck: bool,
 }
 
 impl Bead {
-    fn new(position: &Vector3<f32>, index: usize) -> Bead {
+    fn new(
+        position: &Vector3<f32>,
+        index: usize,
+        neighbor_l_index: usize,
+        neighbor_r_index: usize,
+    ) -> Bead {
         Bead {
-            p: *position,
-            v: Vector3::zero(),
-            a: Vector3::zero(),
+            position: *position,
+            velocity: Vector3::zero(),
+            acceleration: Vector3::zero(),
             index,
+            neighbor_l_index,
+            neighbor_r_index,
+            is_stuck: false,
         }
+    }
+
+    /// Returns `true` if this bead and `other` are neighbors and `false` otherwise.
+    fn are_neighbors(&self, other: &Bead) -> bool {
+        if self.index == other.neighbor_l_index || self.index == other.neighbor_r_index {
+            return true;
+        }
+        false
+    }
+
+    /// Set the left and right neighbor indices for this bead.
+    fn set_neighbor_indices(&mut self, left: usize, right: usize) {
+        self.neighbor_l_index = left;
+        self.neighbor_r_index = right;
+    }
+
+    /// Apply forces to this bead and update its position, velocity, and acceleration, accordingly.
+    fn apply_forces(&mut self, force: &Vector3<f32>) {
+        // The (average?) length of each line segment ("stick"), prior to relaxation
+        let starting_length = 0.5;
+
+        // The maximum distance a bead can travel per time-step
+        let d_max = starting_length * 0.025;
+
+        // The closest any two sticks can be (note that this should be larger than `d_max`)
+        let d_close = starting_length * 0.25;
+
+        // The mass of each node ("bead"): we leave this unchanged for now
+        let mass = 1.0;
+
+        // Velocity damping factor
+        let damping = 0.5;
+
+        // Integrate acceleration and velocity (with damping)
+        self.acceleration += force / mass;
+        self.velocity += self.acceleration;
+        self.velocity *= damping;
+
+        // Zero out the acceleration for the next time step
+        self.acceleration = Vector3::zero();
+
+        // Set new position
+        let old = self.position;
+
+        // Each particle can travel (at most) `d_max` units each time step
+        let clamped = if self.velocity.magnitude() > d_max {
+            self.velocity.normalize() * d_max
+        } else {
+            self.velocity
+        };
+
+        self.position += clamped;
+
+        // TODO: prevent segments from intersecting
     }
 }
 
@@ -48,15 +114,7 @@ pub struct Knot {
     // Anchor (starting) positions
     anchors: Vec<Vector3<f32>>,
 
-    // Positions
-    p: Vec<Vector3<f32>>,
-
-    // Velocities
-    v: Vec<Vector3<f32>>,
-
-    // Accelerations
-    a: Vec<Vector3<f32>>,
-
+    // All of the "beads" (i.e. points with a position, velocity, and acceleration) that make up this knot
     beads: Vec<Bead>,
 }
 
@@ -64,21 +122,23 @@ impl Knot {
     pub fn new(rope: &Polyline, topology: Option<&Vec<Crossing>>) -> Knot {
         // Initialize buffers for physics simulation
         let anchors = rope.get_vertices().clone();
-        let p = rope.get_vertices().clone();
-        let v = vec![Vector3::zero(); rope.get_number_of_vertices()];
-        let a = vec![Vector3::zero(); rope.get_number_of_vertices()];
 
         let mut beads = vec![];
+
         for (index, position) in rope.get_vertices().iter().enumerate() {
-            beads.push(Bead::new(position, index));
+            let (neighbor_l_index, neighbor_r_index) = rope.get_neighboring_indices_wrapped(index);
+
+            beads.push(Bead::new(
+                position,
+                index,
+                neighbor_l_index,
+                neighbor_r_index,
+            ));
         }
 
         let knot = Knot {
             rope: rope.clone(),
             anchors,
-            p,
-            v,
-            a,
             beads,
         };
         println!(
@@ -95,49 +155,26 @@ impl Knot {
     /// Performs a pseudo-physical form of topological refinement, based on spring
     /// physics.
     pub fn relax(&mut self) {
-        // The (average?) length of each line segment ("stick"), prior to relaxation
-        let starting_length = 0.5;
-
-        // The mass of each node ("bead"): we leave this unchanged for now
-        let mass = 1.0;
-
-        // Velocity damping factor
-        let damping = 0.5;
-
         // How much each bead wants to stay near its original position (`0.0` means that
         // we ignore this force)
         let anchor_weight = 0.0;
 
-        // The maximum distance a bead can travel per time-step
-        let d_max = starting_length * 0.025;
-
-        // The closest any two sticks can be (note that this should be larger than `d_max`)
-        let d_close = starting_length * 0.25;
-
         // Calculate forces
-        for center_index in 0..self.p.len() {
+        let mut forces = vec![];
+
+        for bead in self.beads.iter() {
+            // Sum all of the forces acting on this particular bead
             let mut force = Vector3::zero();
 
-            // Get the indices of the left and right neighbors
-            let (neighbor_l_index, neighbor_r_index) =
-                self.rope.get_neighboring_indices_wrapped(center_index);
-
-            // The "center" (i.e. current) bead
-            let center = self.p[center_index];
-
             // Iterate over all potential neighbors
-            for other_index in 0..self.p.len() {
-                if other_index != center_index {
-                    // `other_index` is not the same bead as `center_index`, so continue
-                    // ...
-
-                    // Grab the "other" bead, which may or may not be a neighbor to "center"
-                    let other = self.p[other_index];
-
-                    if other_index == neighbor_l_index || other_index == neighbor_r_index {
+            for other in self.beads.iter() {
+                // Don't accumulate forces on itself
+                if other != bead {
+                    // Grab the "other" bead, which may or may not be a neighbor to "bead"
+                    if bead.are_neighbors(other) {
                         // This is a neighboring bead: calculate the (attractive) mechanical spring force that
                         // will pull this bead towards `other`
-                        let mut direction = other - center;
+                        let mut direction = other.position - bead.position;
                         let r = direction.magnitude();
                         direction = direction.normalize();
 
@@ -150,7 +187,7 @@ impl Knot {
                         force += direction * H * r.powf(1.0 + beta);
                     } else {
                         // This is NOT a neighboring bead: calculate the (repulsive) electrostatic force
-                        let mut direction = center - other; // Reversed direction
+                        let mut direction = bead.position - other.position; // Reversed direction
                         let r = direction.magnitude();
                         direction = direction.normalize();
 
@@ -169,76 +206,54 @@ impl Knot {
             // ...
             //force += anchor_force * anchor_weight;
 
-            // Apply force(s) to this bead: `F = m * a`
-            self.a[center_index] += force / mass
+            forces.push(force);
         }
 
-        // Integrate velocity (with damping)
-        for index in 0..self.v.len() {
-            self.v[index] += self.a[index];
-            self.v[index] *= damping;
-
-            // Zero out the acceleration for the next time step
-            self.a[index] = Vector3::zero();
+        // Because of the borrow checker, we can't use an inner-loop above: instead, we
+        // apply forces here
+        for (bead, force) in self.beads.iter_mut().zip(forces.iter()) {
+            bead.apply_forces(force);
         }
 
-        // Integrate positions
-        for index in 0..self.p.len() {
-            let old = self.p[index];
-            let mut clamped = self.v[index];
+        //        if index > 0 && index < (self.rope.get_number_of_vertices() - 1) {
+        //
+        //            let segment_a = self.rope.get_segment(index);
+        //
+        //            for j in 0..self.rope.get_number_of_vertices() - 1 {
+        //
+        //                // Don't test the current segment against itself or its immediate neighbors
+        //                if j != index && j != (index - 1) && j != (index + 1)
+        //                {
+        //                    let segment_b = self.rope.get_segment(j);
+        //
+        //                    let vector_between = segment_a.shortest_distance_between(&segment_b);
+        //                    if vector_between.magnitude() <= d_close {
+        //                        self.p[index] = old;
+        //
+        //                        //println!("Segment {} is too close to segment {}, with distance: {}", index, j, vector_between.magnitude());
+        //                    }
+        //
+        //                }
+        //            }
+        //        }
 
-            // Each particle can travel (at most) `d_max` units each time step
-            if clamped.magnitude() > d_max {
-                clamped = self.v[index].normalize() * d_max;
-            }
-
-            self.p[index] += clamped;
-
-            // TODO: if moving this vertex is illegal, reset its position to `old`
-            // Apply repulsive force away from neighboring segments
-            //            let mut repulsion = Vector3::new(0.0, 0.0, 0.0);
-            //            let mut number_of_interactions = 0;
-
-            // Don't worry about the last (wrapped) segment for now...
-            //            if index > 0 && index < (self.rope.get_number_of_vertices() - 1) && false {
-            //
-            //                let segment_a = self.rope.get_segment(index);
-            //
-            //                for j in 0..self.rope.get_number_of_vertices() - 1 {
-            //
-            //                    // Don't test the current segment against itself or its immediate neighbors
-            //                    if j != index && j != (index - 1) && j != (index + 1)
-            //                    {
-            //                        let segment_b = self.rope.get_segment(j);
-            //
-            //                        let vector_between = segment_a.shortest_distance_between(&segment_b);
-            //                        if vector_between.magnitude() <= d_close {
-            //                            self.p[index] = old;
-            //
-            //                            //println!("Segment {} is too close to segment {}, with distance: {}", index, j, vector_between.magnitude());
-            //                            // Push segment A away from segment B: `to - from`
-            //                            //repulsion += vector_between;
-            //                            //number_of_interactions += 1;
-            //                        }
-            //
-            //                    }
-            //                }
-            //            }
-            //            if number_of_interactions >= 1 {
-            //                force += (repulsion / number_of_interactions as f32);
-            //            }
-        }
-
-        // Set new positions
-        self.rope.set_vertices(&self.p);
+        // Update polyline positions for rendering
+        self.rope.set_vertices(&self.gather_position_data());
     }
 
     /// Resets the physics simulation.
     pub fn reset(&mut self) {
+        // First, reset the polyline
         self.rope.set_vertices(&self.anchors);
-        self.p = self.rope.get_vertices().clone();
-        self.v = vec![Vector3::zero(); self.rope.get_number_of_vertices()];
-        self.a = vec![Vector3::zero(); self.rope.get_number_of_vertices()];
+
+        // Reset all bead positions
+        for (bead, position) in self.beads.iter_mut().zip(self.anchors.iter()) {
+            bead.position = *position;
+        }
+    }
+
+    fn gather_position_data(&self) -> Vec<Vector3<f32>> {
+        self.beads.iter().map(|bead| bead.position).collect()
     }
 
     pub fn find_crossings(&self) {

@@ -293,24 +293,21 @@ impl Polyline {
     ///
     /// Thesis (section `4.2`): `https://knotplot.com/thesis/thesis_letter.pdf`
     pub fn generate_tube(&self, mut radius: f32, number_of_segments: usize) -> Vec<Vector3<f32>> {
-        let circle_normal = Vector3::new(0.0, 1.0, 0.0);
-        let circle_center = Vector3::new(0.0, 0.0, 0.0);
+        let circle_normal: Vector3<f32> = Vector3::unit_y();
+        let circle_center: Vector3<f32> = Vector3::zero();
         let mut tube_vertices = vec![];
-        let perlin = Perlin::new();
 
         // Then, at each vertex of the polyline, do the following:
         //
         // 1. Calculate the tangent vector
-        // 2. Calculate the normal vector
+        // 2. Calculate `u` and `v` for the `n`th vertex
         // 3. Use (1) and (2) to calculate the binormal vector
         // 4. Translate the circle "stamp" to the current vertex
         // 5. Rotate the circle "stamp" to lie in the XY-plane of this coordinate system
         // 6. Emit these vertices and connect them to the previous "stamp"
-        let mut last_v = Vector3::new(0.0, 0.0, 0.0);
-        let mut finish_loop = false;
+        let mut v_prev = Vector3::zero();
 
         for center_index in 0..=self.get_number_of_vertices() {
-
             // TODO: this is some insanely hacky shit...basically, we need the first and
             //  last tangents to "match up," so we just re-calculate the first ring once
             //  we reach the end of the loop, using an inclusive range (above)
@@ -327,52 +324,52 @@ impl Polyline {
             let v2 = (neighbor_r - center).normalize(); // Vector that points towards the right neighbor
 
             // Calculate the tangent vector at the current point along the polyline
-            let tangent = if (v2 - v1).magnitude2() > 0.0 {
+            let t_n = if (v2 - v1).magnitude2() > 0.0 {
                 (v2 - v1).normalize()
             } else {
                 -v1
             };
 
-            let t_n = tangent;
-
+            // Calculate the next `u` basis vector
             let u_n = if wrapped_index == 0 && center_index == 0 {
-                // Find an arbitrary vector perpendicular to the tangent vector
-                let z_axis = Vector3::unit_z();
-                z_axis.cross(t_n)
+                // Find an arbitrary vector perpendicular to the first tangent vector
+                Vector3::unit_z().cross(t_n).normalize()
             } else {
-                (t_n.cross(last_v)).normalize()
+                (t_n.cross(v_prev)).normalize()
             };
 
+            // Calculate the next `v` basis vector
             let v_n = (u_n.cross(t_n)).normalize();
 
             // Try modifying the radius along the arc:
-            //radius = (center_index as f32).sin() * 0.5 + 0.5;
-            let scale = 4.5;
-            let seed = ((center_index as f64 / self.get_number_of_vertices() as f64) * std::f64::consts::PI).sin();
-            radius = perlin.get([seed * scale, seed * scale]) as f32 * 0.5 + 0.5;
+            let percent = center_index as f32 / self.get_number_of_vertices() as f32;
+            radius = (percent * std::f32::consts::PI).sin() * 0.5 + 0.5;
 
             for index in 0..number_of_segments {
-                let theta = 2.0 * 3.1415926 * (index as f32 / number_of_segments as f32);
+                let theta = 2.0 * std::f32::consts::PI * (index as f32 / number_of_segments as f32);
                 let x = radius * theta.cos();
                 let y = radius * theta.sin();
-                tube_vertices.push(u_n.normalize() * x + v_n.normalize() * y + center);
+                tube_vertices.push(u_n * x + v_n * y + center);
             }
 
             if wrapped_index > 0 {
                 // Connect to previous "stamp"
             }
 
-            last_v = v_n;
+            // Set the previous `v` vector to the current `v` vector (parallel transport)
+            v_prev = v_n;
         }
 
-        //let first_ring = tube_vertices[0..number_of_segments].to_vec();
-        //tube_vertices.extend_from_slice(&first_ring);
-
+        // Generate the final array of vertices, which are the triangles that enclose the
+        // tube extrusion: for now, we don't use indexed rendering
         let mut triangles = vec![];
 
+        // The number of "rings" (i.e. circular cross-sections) that form the "skeleton" of the tube
         let number_of_rings = tube_vertices.len() / number_of_segments;
+
         for ring_index in 0..number_of_rings - 1 {
             let next_ring_index = (ring_index + 1) % number_of_rings;
+
             for local_index in 0..number_of_segments {
                 // Vertices are laid out in "rings" of `number_of_segments` vertices like
                 // so (for `number_of_segments = 6`):
@@ -399,7 +396,7 @@ impl Polyline {
                     .push(tube_vertices[(ring_index + 0) * number_of_segments + next_local_index]);
             }
         }
-
+        //println!("len {}", triangles.len());
         triangles
     }
 

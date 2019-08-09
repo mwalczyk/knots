@@ -79,9 +79,11 @@ fn main() {
     gl::load_with(|symbol| gl_window.get_proc_address(symbol) as *const _);
 
     // Load a knot diagram from a .csv file
-    let file = Path::new("src/example_diagrams/legendrian_1.csv");
-    let diagram = Diagram::from_path(file);
-    let mut knot = diagram.generate_knot();
+    let mut knots = vec![
+        Diagram::from_path(Path::new("src/example_diagrams/trefoil.csv")).generate_knot(),
+        Diagram::from_path(Path::new("src/example_diagrams/legendrian_0.csv")).generate_knot(),
+        Diagram::from_path(Path::new("src/example_diagrams/figure_eight.csv")).generate_knot(),
+    ];
 
     // Set up OpenGL shader programs for rendering
     let draw_program = Program::two_stage(
@@ -95,19 +97,28 @@ fn main() {
     let mut interaction = InteractionState::new();
 
     // Set up the model-view-projection (MVP) matrices
-    let mut model = Matrix4::identity();
+    let mut models = vec![
+        Matrix4::from_translation(Vector3::new(-10.0, 0.0, 0.0)),
+        Matrix4::from_translation(Vector3::new(0.0, 0.0, 0.0)),
+        Matrix4::from_translation(Vector3::new(10.0, 0.0, 0.0)),
+    ];
     let view = Matrix4::look_at(
         Point3::new(0.0, 0.0, 25.0),
         Point3::origin(),
         Vector3::unit_y(),
     );
-    let fov = cgmath::Rad(std::f32::consts::FRAC_PI_4);
-    let aspect = constants::WIDTH as f32 / constants::HEIGHT as f32;
-    let projection = cgmath::perspective(fov, aspect, 0.1, 1000.0);
+    let projection = cgmath::perspective(
+        cgmath::Rad(std::f32::consts::FRAC_PI_4),
+        constants::WIDTH as f32 / constants::HEIGHT as f32,
+        0.1,
+        1000.0,
+    );
 
-    // Turn on depth testing, etc.
+    // Turn on depth testing, etc. then bind the shader program
     set_draw_state();
-
+    draw_program.bind();
+    draw_program.uniform_matrix_4f("u_view", &view);
+    draw_program.uniform_matrix_4f("u_projection", &projection);
     let mut frame_count = 0;
 
     loop {
@@ -117,7 +128,6 @@ fn main() {
                     println!("Shutting down the program...");
                 }
                 glutin::WindowEvent::MouseMoved { position, .. } => {
-                    // Store the normalized mouse position.
                     interaction.cursor_prev = interaction.cursor_curr;
                     interaction.cursor_curr.x = position.0 as f32 / constants::WIDTH as f32;
                     interaction.cursor_curr.y = position.1 as f32 / constants::HEIGHT as f32;
@@ -128,7 +138,9 @@ fn main() {
                         let rot_xz = Matrix4::from_angle_y(cgmath::Rad(delta.x));
                         let rot_yz = Matrix4::from_angle_x(cgmath::Rad(delta.y));
 
-                        model = rot_xz * rot_yz * model;
+                        for model in models.iter_mut() {
+                            *model = rot_xz * rot_yz * *model;
+                        }
                     }
                 }
                 glutin::WindowEvent::MouseInput { state, button, .. } => match button {
@@ -149,28 +161,22 @@ fn main() {
                     }
                     _ => (),
                 },
-                //glutin::WindowEvent::MouseInput { state, button, .. } => (),
                 glutin::WindowEvent::KeyboardInput { input, .. } => {
                     if let Some(key) = input.virtual_keycode {
                         match input.state {
                             glutin::ElementState::Pressed => match key {
                                 glutin::VirtualKeyCode::R => {
-                                    knot.reset();
+                                    for knot in knots.iter_mut() {
+                                        knot.reset();
+                                    }
                                     frame_count = 0;
                                 }
-                                glutin::VirtualKeyCode::S => {
-                                    knot.relax();
-                                }
-                                glutin::VirtualKeyCode::F => {
-                                    unsafe {
-                                        gl::PolygonMode(gl::FRONT_AND_BACK, gl::FILL);
-                                    }
-                                }
-                                glutin::VirtualKeyCode::W => {
-                                    unsafe {
-                                        gl::PolygonMode(gl::FRONT_AND_BACK, gl::LINE);
-                                    }
-                                }
+                                glutin::VirtualKeyCode::F => unsafe {
+                                    gl::PolygonMode(gl::FRONT_AND_BACK, gl::FILL);
+                                },
+                                glutin::VirtualKeyCode::W => unsafe {
+                                    gl::PolygonMode(gl::FRONT_AND_BACK, gl::LINE);
+                                },
                                 _ => (),
                             },
                             // Key released...
@@ -184,18 +190,13 @@ fn main() {
         });
         clear();
 
-        draw_program.bind();
         draw_program.uniform_2f("u_mouse", &interaction.cursor_curr);
-        draw_program.uniform_matrix_4f("u_model", &model);
-        draw_program.uniform_matrix_4f("u_view", &view);
-        draw_program.uniform_matrix_4f("u_projection", &projection);
-        //renderer.draw_polyline(knot.get_rope());
 
-        //if frame_count < 100 {
-        knot.relax();
-        //}
-
-        renderer.draw_tube(knot.get_rope());
+        for (knot, model) in knots.iter_mut().zip(models.iter()) {
+            draw_program.uniform_matrix_4f("u_model", model);
+            knot.relax();
+            renderer.draw_tube(knot.get_rope());
+        }
 
         gl_window.swap_buffers().unwrap();
 
