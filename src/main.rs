@@ -26,7 +26,7 @@ mod polyline;
 mod program;
 mod tangle;
 
-use crate::diagram::{CromwellMove, Diagram, Direction};
+use crate::diagram::{Axis, CromwellMove, Diagram, Direction};
 use crate::interaction::InteractionState;
 use crate::polyline::Polyline;
 use crate::program::Program;
@@ -46,7 +46,7 @@ fn clear() {
 
 fn set_draw_state() {
     unsafe {
-        gl::LineWidth(0.2);
+        gl::LineWidth(2.0);
         gl::PointSize(8.0);
         gl::Enable(gl::PROGRAM_POINT_SIZE);
         gl::Enable(gl::DEPTH_TEST);
@@ -81,14 +81,26 @@ fn main() {
     let mut knots = vec![
         Diagram::from_path(Path::new("src/example_diagrams/legendrian_0.csv"))
             .unwrap()
-            .apply_move_random()
-            .generate_knot(),
-        Diagram::from_path(Path::new("src/example_diagrams/legendrian_0.csv"))
+            .apply_move(CromwellMove::Commutation {
+                axis: Axis::Row,
+                start_index: 3,
+            })
+            .unwrap()
+            .apply_move(CromwellMove::Translation(Direction::Left))
             .unwrap()
             .generate_knot(),
         Diagram::from_path(Path::new("src/example_diagrams/legendrian_0.csv"))
             .unwrap()
-            .apply_move_random()
+            .generate_knot(),
+        Diagram::from_path(Path::new("src/example_diagrams/legendrian_0.csv"))
+            .unwrap()
+            .apply_move(CromwellMove::Commutation {
+                axis: Axis::Column,
+                start_index: 2,
+            })
+            .unwrap()
+            .apply_move(CromwellMove::Translation(Direction::Right))
+            .unwrap()
             .generate_knot(),
     ];
 

@@ -13,7 +13,7 @@ enum Attribute {
 }
 
 impl Attribute {
-    pub fn get_index(&self) -> usize {
+    pub fn get_index(&self) -> u32 {
         match *self {
             Attribute::POSITIONS => 0,
             Attribute::COLORS => 1,
@@ -29,7 +29,7 @@ impl Attribute {
         }
     }
 
-    pub fn get_element_count(&self) -> usize {
+    pub fn get_element_count(&self) -> i32 {
         match *self {
             Attribute::TEXCOORDS => 2,
             _ => 3,
@@ -73,30 +73,14 @@ impl Mesh {
             // First, initialize the vertex array object
             gl::CreateVertexArrays(1, &mut self.vao);
 
-            // Then, set up vertex buffers
-            // #0: positions
-            // #1: colors
-            // #2: normals
-            // #3: texture coordinates
-            const ATTRIBUTE_POSITION: u32 = 0;
-            const BINDING_POSITION: u32 = 0;
-            const ATTRIBUTE_COLOR: u32 = 1;
-            const BINDING_COLOR: u32 = 0;
-            const ATTRIBUTE_NORMALS: u32 = 2;
-            const BINDING_NORMALS: u32 = 0;
-            const ATTRIBUTE_TEXCOORDS: u32 = 3;
-            const BINDING_TEXCOORDS: u32 = 0;
-
             // Enable the `0`th attribute (positions), which is required
-            gl::EnableVertexArrayAttrib(self.vao, ATTRIBUTE_POSITION);
-
-            // Set the attribute format:
+            //
+            // Then, set the attribute format:
             // positions -> 3 floats (x, y, z)
             // colors -> 3 floats (r, g, b)
             // normals -> 3 floats (x, y, z)
             // texture coordinates -> 2 floats (u, v)
-            gl::VertexArrayAttribFormat(self.vao, ATTRIBUTE_POSITION, 3, gl::FLOAT, gl::FALSE, 0);
-            gl::VertexArrayAttribBinding(self.vao, ATTRIBUTE_POSITION, BINDING_POSITION);
+            self.enable_attribute(Attribute::POSITIONS);
 
             let mut total_size = mem::size_of::<Vector3<f32>>() * self.positions.len();
             let mut actual_stride = mem::size_of::<Vector3<f32>>();
@@ -107,36 +91,19 @@ impl Mesh {
                 assert_eq!(self.positions.len(), colors.len());
                 total_size += mem::size_of::<Vector3<f32>>() * colors.len();
                 actual_stride += mem::size_of::<Vector3<f32>>();
-                gl::VertexArrayAttribFormat(self.vao, ATTRIBUTE_COLOR, 3, gl::FLOAT, gl::FALSE, 0);
-                gl::VertexArrayAttribBinding(self.vao, ATTRIBUTE_COLOR, BINDING_COLOR);
+                self.enable_attribute(Attribute::COLORS);
             }
             if let Some(normals) = &self.normals {
                 assert_eq!(self.positions.len(), normals.len());
                 total_size += mem::size_of::<Vector3<f32>>() * normals.len();
                 actual_stride += mem::size_of::<Vector3<f32>>();
-                gl::VertexArrayAttribFormat(
-                    self.vao,
-                    ATTRIBUTE_NORMALS,
-                    3,
-                    gl::FLOAT,
-                    gl::FALSE,
-                    0,
-                );
-                gl::VertexArrayAttribBinding(self.vao, ATTRIBUTE_NORMALS, BINDING_NORMALS);
+                self.enable_attribute(Attribute::NORMALS);
             }
             if let Some(texcoords) = &self.texcoords {
                 assert_eq!(self.positions.len(), texcoords.len());
                 total_size += mem::size_of::<Vector2<f32>>() * texcoords.len();
                 actual_stride += mem::size_of::<Vector2<f32>>();
-                gl::VertexArrayAttribFormat(
-                    self.vao,
-                    ATTRIBUTE_TEXCOORDS,
-                    2,
-                    gl::FLOAT,
-                    gl::FALSE,
-                    0,
-                );
-                gl::VertexArrayAttribBinding(self.vao, ATTRIBUTE_TEXCOORDS, BINDING_TEXCOORDS);
+                self.enable_attribute(Attribute::TEXCOORDS);
             }
 
             // Create the vertex buffer that will hold all interleaved vertex attributes
@@ -157,6 +124,16 @@ impl Mesh {
                 0, // Offset
                 actual_stride as i32,
             );
+        }
+    }
+
+    fn enable_attribute(&mut self, attribute: Attribute) {
+        unsafe {
+            gl::EnableVertexArrayAttrib(self.vao, attribute.get_index());
+            gl::VertexArrayAttribFormat(self.vao, attribute.get_index(), attribute.get_element_count(), gl::FLOAT, gl::FALSE, 0);
+
+            // All attributes are bound to index `0`
+            gl::VertexArrayAttribBinding(self.vao, attribute.get_index(), 0);
         }
     }
 

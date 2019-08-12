@@ -32,19 +32,22 @@ vec3 palette(in float t, in vec3 a, in vec3 b, in vec3 c, in vec3 d)
 void main()
 {
     vec3 world_space_modified = abs(position / 4.0) * 0.5 + 0.5;
-    world_space_modified.z = sqrt(world_space_modified.z);
+    world_space_modified.z = sqrt(world_space_modified.z * 6.0);
 
     const float hue = float(gl_VertexID / u_number_of_beads);
 
     float x = abs(hue);
     x = pow(min(cos(pi * x / 2.0), 1.0 - abs(x)), 3.0);
 
-    vec4 world_space = u_model * vec4(position, 1.0);
 
 
-    const vec3 color = hsv_to_rgb(vec3(world_space_modified.zyx) * vec3(1.0, 0.6, 1.0));
+
+    const vec3 color = hsv_to_rgb(vec3(world_space_modified.zyx) * vec3(0.89, 0.6, 1.0));
     vs_out.color = color;
 
-    gl_Position = u_projection * u_view * world_space;
+    vec4 world_space = u_model * vec4(position, 1.0);
+    vec4 camera_space = u_view * world_space;
+    vec4 clip_space = u_projection * camera_space;
+    gl_Position = clip_space;
     gl_PointSize = abs(position.z) * 8.0;
 }

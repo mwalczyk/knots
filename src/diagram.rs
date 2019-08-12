@@ -32,7 +32,7 @@ pub enum Axis {
 /// Reference: `https://www.math.ucdavis.edu/~slwitte/research/BlackwellTapiaPoster.pdf`
 pub enum CromwellMove {
     Translation(Direction),
-    Commutation { axis: Axis, i: usize, j: usize },
+    Commutation { axis: Axis, start_index: usize },
     Stabilization,
     Destabilization,
 }
@@ -121,7 +121,7 @@ impl Diagram {
     }
 
     /// Applies a particular Cromwell move to the grid diagram.
-    pub fn apply_move(&mut self, cromwell: CromwellMove) -> &mut Self {
+    pub fn apply_move(&mut self, cromwell: CromwellMove) -> Result<&mut Self, &'static str> {
         println!("{:?}", self);
         match cromwell {
             CromwellMove::Translation(direction) => match direction {
@@ -148,18 +148,45 @@ impl Diagram {
                     }
                 }
             },
+            CromwellMove::Commutation { axis, start_index } => {
+                // The last row (or column) doesn't have any adjacent row (or column) to swap with
+                if start_index == self.resolution - 1 {
+                    return Err("Cannot exchange row or column at `start_index` with non-existing adjacent row or column");
+                }
+
+                // Grab the two rows (or columns) that will be exchanged
+                let (row_or_column_a, row_or_column_b) = match axis {
+                    Axis::Row => (self.get_row(start_index + 0), self.get_row(start_index + 1)),
+                    _ => (
+                        self.get_column(start_index + 0),
+                        self.get_column(start_index + 1),
+                    ),
+                };
+
+                // Commutation is only valid if the two rows (or columns) are not interleaved
+                if !self.are_interleaved(&row_or_column_a, &row_or_column_b) {
+                    match axis {
+                        Axis::Row => self.exchange_rows(start_index + 0, start_index + 1),
+                        _ => self.exchange_columns(start_index + 0, start_index + 1),
+                    }
+                } else {
+                    return Err(
+                        "The specified rows (or columns) are interleaved and cannot be exchanged",
+                    );
+                }
+            }
             _ => (),
         }
 
         println!("{:?}", self);
-        self
+        Ok(self)
     }
 
     /// Applies a random Cromwell move to the grid diagram.
-    pub fn apply_move_random(&mut self) -> &mut Self {
-        self.apply_move(rand::random());
-        self
+    pub fn apply_move_random(&mut self) -> Result<&mut Self, &'static str> {
+        self.apply_move(rand::random())
     }
+
     /// Generates a random, valid grid diagram that may or may not be the unknot.
     pub fn random() {
         unimplemented!()
@@ -193,6 +220,18 @@ impl Diagram {
         &self.data
     }
 
+    /// Sets the values of the `i`th row to `row`.
+    pub fn set_row(&mut self, i: usize, row: &Vec<char>) {
+        self.data[i] = row.clone();
+    }
+
+    /// Sets the values of the `i`th column to `col`.
+    pub fn set_column(&mut self, i: usize, col: &Vec<char>) {
+        for (entry, row) in col.iter().zip(self.data.iter_mut()) {
+            row[i] = *entry;
+        }
+    }
+
     /// Returns the `i`th row of the grid diagram.
     pub fn get_row(&self, i: usize) -> Vec<char> {
         self.data[i].clone()
@@ -201,6 +240,59 @@ impl Diagram {
     /// Returns the `i`th column of the grid diagram.
     pub fn get_column(&self, i: usize) -> Vec<char> {
         self.data.iter().map(|row| row[i]).collect()
+    }
+
+    /// Swaps row `a` and `b`.
+    fn exchange_rows(&mut self, a: usize, b: usize) {
+        self.data.swap(a, b);
+    }
+
+    /// Swaps column `a` and `b`.
+    fn exchange_columns(&mut self, a: usize, b: usize) {
+        // Swap each of the two corresponding column entries
+        for row in self.data.iter_mut() {
+            row.swap(a, b);
+        }
+    }
+
+    /// Checks whether two rows (or columns) are interleaved, i.e. their projections
+    /// onto the x-axis (or y-axis, respectively) overlap.
+    fn are_interleaved(&self, row_or_column_a: &Vec<char>, row_or_column_b: &Vec<char>) -> bool {
+        // Find where the `x` and `o` occur in each row / column: `is_alphabetic()` returns `false`
+        // for spaces
+        let string_a = row_or_column_a.iter().collect::<String>();
+        let string_b = row_or_column_b.iter().collect::<String>();
+        let matches_a: Vec<(usize, &str)> = string_a.match_indices(char::is_alphabetic).collect();
+        let matches_b: Vec<(usize, &str)> = string_b.match_indices(char::is_alphabetic).collect();
+
+        assert_eq!(matches_a.len(), 2);
+        assert_eq!(matches_b.len(), 2);
+
+        let (a_start, a_end) = (matches_a[0].0, matches_a[1].0);
+        let (b_start, b_end) = (matches_b[0].0, matches_b[1].0);
+
+        if a_start > b_start && a_end < b_end {
+            // `a` is completely contained in `b`
+            return false;
+        } else if b_start > a_start && b_end < a_end {
+            // `b` is completely contained in `a`
+            return false;
+        } else if a_end < b_start {
+            // `a` is totally "above" `b`
+            return false;
+        } else if a_start > b_end {
+            // `a` is totally "below" `b`
+            return false;
+        } else if b_end < a_start {
+            // `b` is totally "above" `a`
+            return false;
+        } else if b_start > a_end {
+            // `b` is totally "below" `a`
+            return false;
+        }
+
+        // `a` and `b` must be interleaved
+        true
     }
 
     /// Converts a pair of grid indices `<i, j>`, each of which lies in the range
@@ -292,10 +384,10 @@ impl Diagram {
         let mut cols = knot_topology.clone();
         rows.remove(0);
         cols.pop();
-//        println!(
-//            "Knot topology (before inserting any crossings): {:?}",
-//            knot_topology
-//        );
+        //        println!(
+        //            "Knot topology (before inserting any crossings): {:?}",
+        //            knot_topology
+        //        );
 
         // This should always be true, i.e. for a 6x6 grid there should be 6 pairs of x's and o's (12
         // indices total)...note that we perform this check before checking for any crossings, which
@@ -352,11 +444,11 @@ impl Diagram {
                 intersections.reverse();
             }
 
-//            println!(
-//                "Intersections found for column #{}: {:?}",
-//                self.convert_to_grid_indices(col_s).1,
-//                intersections
-//            );
+            //            println!(
+            //                "Intersections found for column #{}: {:?}",
+            //                self.convert_to_grid_indices(col_s).1,
+            //                intersections
+            //            );
 
             for (index, node) in knot_topology.iter().enumerate() {
                 // If we have arrived at either the start or end of the column, begin insertion
@@ -409,7 +501,10 @@ impl Diagram {
 
         // Subdivide the path
         path = path.refine(0.5);
-        println!("Total vertices in refined path: {}", path.get_number_of_vertices());
+        println!(
+            "Total vertices in refined path: {}",
+            path.get_number_of_vertices()
+        );
 
         Knot::new(&path, None)
     }
