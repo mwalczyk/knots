@@ -1,16 +1,71 @@
+use crate::diagram::CromwellMove::{Commutation, Destabilization, Stabilization, Translation};
 use crate::knot::Knot;
 use crate::polyline::Polyline;
 use cgmath::Vector3;
+use rand::{
+    distributions::{Distribution, Standard},
+    Rng,
+};
 use std::ffi::OsStr;
 use std::io;
 use std::path::Path;
 
+/// An enum representing a direction (see `CromwellMove::Translation`).
+#[derive(Debug)]
+pub enum Direction {
+    Up,
+    Down,
+    Left,
+    Right,
+}
+
+/// An enum representing an axial direction (either rows or columns).
+pub enum Axis {
+    Row,
+    Column,
+}
+
+/// An enum representing the Cromwell moves, which are essentially Reidemeister
+/// moves for grid diagrams. A sequence of Cromwell moves does not change the
+/// knot invariant but rather, produces a new projection of the same knot.
+///
 /// Reference: `https://www.math.ucdavis.edu/~slwitte/research/BlackwellTapiaPoster.pdf`
-enum CromwellMove {
-    Translation,
-    Commutation,
+pub enum CromwellMove {
+    Translation(Direction),
+    Commutation { axis: Axis, i: usize, j: usize },
     Stabilization,
     Destabilization,
+}
+
+impl Distribution<Direction> for Standard {
+    fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> Direction {
+        match rng.gen_range(0, 4) {
+            0 => Direction::Up,
+            1 => Direction::Down,
+            2 => Direction::Left,
+            _ => Direction::Right,
+        }
+    }
+}
+
+impl Distribution<Axis> for Standard {
+    fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> Axis {
+        match rng.gen_range(0, 2) {
+            0 => Axis::Row,
+            _ => Axis::Column,
+        }
+    }
+}
+
+impl Distribution<CromwellMove> for Standard {
+    fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> CromwellMove {
+        match rng.gen_range(0, 4) {
+            _ => Translation(rand::random()),
+            //            1 => Commutation { axis: rand::random(), i: 0, j: 0 },
+            //            2 => Stabilization,
+            //            _ => Destabilization,
+        }
+    }
 }
 
 trait KnotGenerator {
@@ -20,7 +75,7 @@ trait KnotGenerator {
 /// A struct representing a grid diagram corresponding to a particular knot invariant (or
 /// the unknot).
 pub struct Diagram {
-    // The width and height of the grid (for now, we assume all grid diagrams are square)
+    // The number of rows and columns in the grid diagram (we assume all diagrams are square)
     resolution: usize,
 
     // The grid data (i.e. a 2D array of x's, o's, and blank cells)
@@ -29,9 +84,9 @@ pub struct Diagram {
 
 impl Diagram {
     /// Generates a grid diagram from a .csv file, where each entry is either ` `, `x`, or `o`.
-    pub fn from_path(path: &Path) -> Diagram {
+    pub fn from_path(path: &Path) -> Result<Diagram, &'static str> {
         if let Some(".csv") = path.extension().and_then(OsStr::to_str) {
-            panic!("Only .csv grid files are supported at the moment");
+            return Err("Only .csv grid files are supported at the moment");
         }
 
         let mut resolution = 0;
@@ -40,29 +95,71 @@ impl Diagram {
             .has_headers(false)
             .from_path(path)
             .unwrap();
-        let mut number_of_records = 0;
+        let mut number_of_rows = 0;
 
         for result in reader.records() {
             let record = result.unwrap();
             resolution = record.len();
-            number_of_records += 1;
+            number_of_rows += 1;
 
             // Push this row of data
             data.push(record.as_slice().chars().collect());
         }
 
         // Verify that the grid is square
-        if resolution != number_of_records {
-            panic!("Provided grid file is not square: the number of rows should equal the number of columns");
+        if resolution != number_of_rows {
+            return Err("Provided grid file is not square: the number of rows should equal the number of columns");
         }
 
-        println!("Building a {}x{} diagram:", resolution, resolution);
-
+        println!("Building a {}x{} grid diagram", resolution, resolution);
         let diagram = Diagram { resolution, data };
-        diagram.validate();
-        diagram
+
+        return match diagram.validate() {
+            Ok(_) => Ok(diagram),
+            Err(e) => Err(e),
+        };
     }
 
+    /// Applies a particular Cromwell move to the grid diagram.
+    pub fn apply_move(&mut self, cromwell: CromwellMove) -> &mut Self {
+        println!("{:?}", self);
+        match cromwell {
+            CromwellMove::Translation(direction) => match direction {
+                Direction::Up => {
+                    let first_row = self.data.remove(0);
+                    self.data.push(first_row);
+                }
+                Direction::Down => {
+                    if let Some(last_row) = self.data.pop() {
+                        self.data.insert(0, last_row);
+                    }
+                }
+                Direction::Left => {
+                    for row in self.data.iter_mut() {
+                        let entry = row.remove(0);
+                        row.push(entry);
+                    }
+                }
+                Direction::Right => {
+                    for row in self.data.iter_mut() {
+                        if let Some(entry) = row.pop() {
+                            row.insert(0, entry);
+                        }
+                    }
+                }
+            },
+            _ => (),
+        }
+
+        println!("{:?}", self);
+        self
+    }
+
+    /// Applies a random Cromwell move to the grid diagram.
+    pub fn apply_move_random(&mut self) -> &mut Self {
+        self.apply_move(rand::random());
+        self
+    }
     /// Generates a random, valid grid diagram that may or may not be the unknot.
     pub fn random() {
         unimplemented!()
@@ -70,7 +167,7 @@ impl Diagram {
 
     /// Validates the grid diagram, ensuring that there is only one `x` and one `o`
     /// per column and row.
-    fn validate(&self) {
+    fn validate(&self) -> Result<(), &'static str> {
         for index in 0..self.resolution {
             let current_row = self.get_row(index);
             let current_col = self.get_column(index);
@@ -80,10 +177,10 @@ impl Diagram {
                 || current_col.iter().collect::<String>().matches('x').count() != 1
                 || current_col.iter().collect::<String>().matches('o').count() != 1
             {
-                panic!("Invalid grid diagram: ensure that each column / row contains exactly one `x` and one `o`");
-                break;
+                return Err("Invalid grid diagram: ensure that each column / row contains exactly one `x` and one `o`");
             }
         }
+        Ok(())
     }
 
     /// Returns the resolution of this grid diagram (i.e. the number of rows or number of columns).
@@ -103,11 +200,7 @@ impl Diagram {
 
     /// Returns the `i`th column of the grid diagram.
     pub fn get_column(&self, i: usize) -> Vec<char> {
-        let mut column = vec![];
-        for row in self.data.iter() {
-            column.push(row[i]);
-        }
-        column
+        self.data.iter().map(|row| row[i]).collect()
     }
 
     /// Converts a pair of grid indices `<i, j>`, each of which lies in the range
@@ -199,10 +292,10 @@ impl Diagram {
         let mut cols = knot_topology.clone();
         rows.remove(0);
         cols.pop();
-        println!(
-            "Knot topology (before inserting any crossings): {:?}",
-            knot_topology
-        );
+//        println!(
+//            "Knot topology (before inserting any crossings): {:?}",
+//            knot_topology
+//        );
 
         // This should always be true, i.e. for a 6x6 grid there should be 6 pairs of x's and o's (12
         // indices total)...note that we perform this check before checking for any crossings, which
@@ -259,11 +352,11 @@ impl Diagram {
                 intersections.reverse();
             }
 
-            println!(
-                "Intersections found for column #{}: {:?}",
-                self.convert_to_grid_indices(col_s).1,
-                intersections
-            );
+//            println!(
+//                "Intersections found for column #{}: {:?}",
+//                self.convert_to_grid_indices(col_s).1,
+//                intersections
+//            );
 
             for (index, node) in knot_topology.iter().enumerate() {
                 // If we have arrived at either the start or end of the column, begin insertion
@@ -274,7 +367,7 @@ impl Diagram {
                     break;
                 }
             }
-            println!("   New topology: {:?}", knot_topology);
+            //println!("   New topology: {:?}", knot_topology);
         }
 
         // Ex: old topology vs. new topology (after crossings are inserted)
@@ -316,8 +409,17 @@ impl Diagram {
 
         // Subdivide the path
         path = path.refine(0.5);
-        println!("Total vertices in path: {}", path.get_number_of_vertices());
+        println!("Total vertices in refined path: {}", path.get_number_of_vertices());
 
         Knot::new(&path, None)
+    }
+}
+
+impl std::fmt::Debug for Diagram {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for row in self.data.iter() {
+            write!(f, "{:?}\n", row);
+        }
+        Ok(())
     }
 }

@@ -21,16 +21,15 @@ mod constants;
 mod diagram;
 mod interaction;
 mod knot;
+mod mesh;
 mod polyline;
 mod program;
-mod renderer;
 mod tangle;
 
-use crate::diagram::Diagram;
+use crate::diagram::{CromwellMove, Diagram, Direction};
 use crate::interaction::InteractionState;
 use crate::polyline::Polyline;
 use crate::program::Program;
-use crate::renderer::Renderer;
 use cgmath::{EuclideanSpace, Matrix4, Point3, SquareMatrix, Vector3};
 use glutin::GlContext;
 use std::fs::File;
@@ -80,9 +79,17 @@ fn main() {
 
     // Load a knot diagram from a .csv file
     let mut knots = vec![
-        Diagram::from_path(Path::new("src/example_diagrams/trefoil.csv")).generate_knot(),
-        Diagram::from_path(Path::new("src/example_diagrams/legendrian_0.csv")).generate_knot(),
-        Diagram::from_path(Path::new("src/example_diagrams/figure_eight.csv")).generate_knot(),
+        Diagram::from_path(Path::new("src/example_diagrams/legendrian_0.csv"))
+            .unwrap()
+            .apply_move_random()
+            .generate_knot(),
+        Diagram::from_path(Path::new("src/example_diagrams/legendrian_0.csv"))
+            .unwrap()
+            .generate_knot(),
+        Diagram::from_path(Path::new("src/example_diagrams/legendrian_0.csv"))
+            .unwrap()
+            .apply_move_random()
+            .generate_knot(),
     ];
 
     // Set up OpenGL shader programs for rendering
@@ -91,16 +98,15 @@ fn main() {
         load_file_as_string(Path::new("shaders/draw.frag")),
     )
     .unwrap();
-    let mut renderer = Renderer::new();
 
     // Interaction
     let mut interaction = InteractionState::new();
 
     // Set up the model-view-projection (MVP) matrices
     let mut models = vec![
-        Matrix4::from_translation(Vector3::new(-10.0, 0.0, 0.0)),
+        Matrix4::from_translation(Vector3::new(-11.0, 0.0, 0.0)),
         Matrix4::from_translation(Vector3::new(0.0, 0.0, 0.0)),
-        Matrix4::from_translation(Vector3::new(10.0, 0.0, 0.0)),
+        Matrix4::from_translation(Vector3::new(11.0, 0.0, 0.0)),
     ];
     let view = Matrix4::look_at(
         Point3::new(0.0, 0.0, 25.0),
@@ -177,6 +183,13 @@ fn main() {
                                 glutin::VirtualKeyCode::W => unsafe {
                                     gl::PolygonMode(gl::FRONT_AND_BACK, gl::LINE);
                                 },
+                                glutin::VirtualKeyCode::H => {
+                                    models = vec![
+                                        Matrix4::from_translation(Vector3::new(-11.0, 0.0, 0.0)),
+                                        Matrix4::from_translation(Vector3::new(0.0, 0.0, 0.0)),
+                                        Matrix4::from_translation(Vector3::new(11.0, 0.0, 0.0)),
+                                    ];
+                                }
                                 _ => (),
                             },
                             // Key released...
@@ -195,7 +208,7 @@ fn main() {
         for (knot, model) in knots.iter_mut().zip(models.iter()) {
             draw_program.uniform_matrix_4f("u_model", model);
             knot.relax();
-            renderer.draw_tube(knot.get_rope());
+            knot.draw(true);
         }
 
         gl_window.swap_buffers().unwrap();

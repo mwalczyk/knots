@@ -1,4 +1,5 @@
 use crate::constants;
+use crate::mesh::Mesh;
 use crate::polyline::{Polyline, Segment};
 use cgmath::{InnerSpace, Vector3, Zero};
 
@@ -116,6 +117,8 @@ pub struct Knot {
 
     // All of the "beads" (i.e. points with a position, velocity, and acceleration) that make up this knot
     beads: Vec<Bead>,
+
+    mesh: Mesh,
 }
 
 impl Knot {
@@ -140,6 +143,7 @@ impl Knot {
             rope: rope.clone(),
             anchors,
             beads,
+            mesh: Mesh::new(&vec![], None, None, None),
         };
         println!(
             "Building knot with average segment length: {}",
@@ -249,6 +253,17 @@ impl Knot {
         // Reset all bead positions
         for (bead, position) in self.beads.iter_mut().zip(self.anchors.iter()) {
             bead.position = *position;
+        }
+    }
+
+    pub fn draw(&mut self, extrude: bool) {
+        if extrude {
+            let vertices = self.rope.generate_tube(0.5, 12);
+            self.mesh.set_positions(&vertices);
+            self.mesh.draw(gl::TRIANGLES);
+        } else {
+            self.mesh.set_positions(self.rope.get_vertices());
+            self.mesh.draw(gl::LINE_LOOP);
         }
     }
 

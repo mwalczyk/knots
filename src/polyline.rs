@@ -143,7 +143,7 @@ type BoundingBox = (Point3<f32>, Point3<f32>);
 
 #[derive(Clone)]
 pub struct Polyline {
-    pub vertices: Vec<Vector3<f32>>,
+    vertices: Vec<Vector3<f32>>,
 }
 
 impl Polyline {
@@ -151,6 +151,7 @@ impl Polyline {
         Polyline { vertices: vec![] }
     }
 
+    /// Returns the vertices that make up this polyline.
     pub fn get_vertices(&self) -> &Vec<Vector3<f32>> {
         &self.vertices
     }
@@ -198,7 +199,13 @@ impl Polyline {
     /// corresponds to the first vertex and a value of `1.0` corresponds
     /// to the last vertex.
     pub fn point_at(&self, t: f32) -> Vector3<f32> {
-        assert!(t >= 0.0 && t <= 1.0);
+        assert!(self.vertices.len() > 0 && t >= 0.0 && t <= 1.0);
+
+        if t == 0.0 {
+            return self.vertices[0];
+        } else if t == 1.0 {
+            return *self.vertices.last().unwrap();
+        }
 
         let desired_length = self.length() * t;
         let mut traversed = 0.0;
@@ -297,14 +304,6 @@ impl Polyline {
         let circle_center: Vector3<f32> = Vector3::zero();
         let mut tube_vertices = vec![];
 
-        // Then, at each vertex of the polyline, do the following:
-        //
-        // 1. Calculate the tangent vector
-        // 2. Calculate `u` and `v` for the `n`th vertex
-        // 3. Use (1) and (2) to calculate the binormal vector
-        // 4. Translate the circle "stamp" to the current vertex
-        // 5. Rotate the circle "stamp" to lie in the XY-plane of this coordinate system
-        // 6. Emit these vertices and connect them to the previous "stamp"
         let mut v_prev = Vector3::zero();
 
         for center_index in 0..=self.get_number_of_vertices() {
@@ -350,10 +349,6 @@ impl Polyline {
                 let x = radius * theta.cos();
                 let y = radius * theta.sin();
                 tube_vertices.push(u_n * x + v_n * y + center);
-            }
-
-            if wrapped_index > 0 {
-                // Connect to previous "stamp"
             }
 
             // Set the previous `v` vector to the current `v` vector (parallel transport)
@@ -402,7 +397,33 @@ impl Polyline {
 
     /// Returns an AABB that encloses this polyline.
     pub fn bounding_box(&self) -> BoundingBox {
-        unimplemented!()
+        let mut minimum = Point3::origin();
+        let mut maximum = Point3::origin();
+
+        for vertex in self.vertices.iter() {
+            if vertex.x < minimum.x {
+                minimum.x = vertex.x;
+            }
+            if vertex.x > maximum.x {
+                maximum.x = vertex.x;
+            }
+
+            if vertex.y < minimum.y {
+                minimum.y = vertex.y;
+            }
+            if vertex.y > maximum.y {
+                maximum.y = vertex.y;
+            }
+
+            if vertex.z < minimum.z {
+                minimum.z = vertex.z;
+            }
+            if vertex.z > maximum.z {
+                maximum.z = vertex.z;
+            }
+        }
+
+        (minimum, maximum)
     }
 }
 
