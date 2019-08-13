@@ -118,16 +118,13 @@ pub struct Knot {
     // All of the "beads" (i.e. points with a position, velocity, and acceleration) that make up this knot
     beads: Vec<Bead>,
 
+    // The GPU-side mesh used to render this knot
     mesh: Mesh,
 }
 
 impl Knot {
     pub fn new(rope: &Polyline, topology: Option<&Vec<Crossing>>) -> Knot {
-        // Initialize buffers for physics simulation
-        let anchors = rope.get_vertices().clone();
-
         let mut beads = vec![];
-
         for (index, position) in rope.get_vertices().iter().enumerate() {
             let (neighbor_l_index, neighbor_r_index) = rope.get_neighboring_indices_wrapped(index);
 
@@ -139,19 +136,16 @@ impl Knot {
             ));
         }
 
-        let knot = Knot {
+        Knot {
             rope: rope.clone(),
-            anchors,
+            anchors: rope.get_vertices().clone(),
             beads,
             mesh: Mesh::new(&vec![], None, None, None),
-        };
-        println!(
-            "Building knot with average segment length: {}",
-            knot.rope.get_average_segment_length()
-        );
-        knot
+        }
     }
 
+    /// Returns an immutable reference to the polyline that formed this knot, prior
+    /// to relaxation.
     pub fn get_rope(&self) -> &Polyline {
         &self.rope
     }
@@ -219,28 +213,6 @@ impl Knot {
             bead.apply_forces(force);
         }
 
-        //        if index > 0 && index < (self.rope.get_number_of_vertices() - 1) {
-        //
-        //            let segment_a = self.rope.get_segment(index);
-        //
-        //            for j in 0..self.rope.get_number_of_vertices() - 1 {
-        //
-        //                // Don't test the current segment against itself or its immediate neighbors
-        //                if j != index && j != (index - 1) && j != (index + 1)
-        //                {
-        //                    let segment_b = self.rope.get_segment(j);
-        //
-        //                    let vector_between = segment_a.shortest_distance_between(&segment_b);
-        //                    if vector_between.magnitude() <= d_close {
-        //                        self.p[index] = old;
-        //
-        //                        //println!("Segment {} is too close to segment {}, with distance: {}", index, j, vector_between.magnitude());
-        //                    }
-        //
-        //                }
-        //            }
-        //        }
-
         // Update polyline positions for rendering
         self.rope.set_vertices(&self.gather_position_data());
     }
@@ -256,6 +228,9 @@ impl Knot {
         }
     }
 
+    /// Draws this knot. If `extrude` is set to `true`, then the knot will be drawn
+    /// as an extruded tube (i.e. with "thickness"). Otherwise, it will be drawn as
+    /// a thin line loop.
     pub fn draw(&mut self, extrude: bool) {
         if extrude {
             let vertices = self.rope.generate_tube(0.5, 12);
@@ -267,6 +242,7 @@ impl Knot {
         }
     }
 
+    /// Aggregates all of the beads' position vectors.
     fn gather_position_data(&self) -> Vec<Vector3<f32>> {
         self.beads.iter().map(|bead| bead.position).collect()
     }

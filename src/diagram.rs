@@ -1,4 +1,4 @@
-use crate::diagram::CromwellMove::{Commutation, Destabilization, Stabilization, Translation};
+use crate::diagram::CromwellMove::{Commutation, Stabilization, Translation};
 use crate::knot::Knot;
 use crate::polyline::Polyline;
 use cgmath::Vector3;
@@ -25,47 +25,30 @@ pub enum Axis {
     Column,
 }
 
+pub enum Cardinality {
+    NW,
+    SW,
+    NE,
+    SE,
+}
+
 /// An enum representing the Cromwell moves, which are essentially Reidemeister
 /// moves for grid diagrams. A sequence of Cromwell moves does not change the
 /// knot invariant but rather, produces a new projection of the same knot.
 ///
 /// Reference: `https://www.math.ucdavis.edu/~slwitte/research/BlackwellTapiaPoster.pdf`
 pub enum CromwellMove {
+    // A move that cyclically translates a row or column in one of four directions: up, down, left, or right
     Translation(Direction),
+
+    // A move that exchanges to adjacent, non-interleaved rows or columns
     Commutation { axis: Axis, start_index: usize },
-    Stabilization,
-    Destabilization,
-}
 
-impl Distribution<Direction> for Standard {
-    fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> Direction {
-        match rng.gen_range(0, 4) {
-            0 => Direction::Up,
-            1 => Direction::Down,
-            2 => Direction::Left,
-            _ => Direction::Right,
-        }
-    }
-}
+    // A move that replaces an `x` with a 2x2 sub-grid
+    Stabilization { cardinality: Cardinality, i: usize, j: usize },
 
-impl Distribution<Axis> for Standard {
-    fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> Axis {
-        match rng.gen_range(0, 2) {
-            0 => Axis::Row,
-            _ => Axis::Column,
-        }
-    }
-}
-
-impl Distribution<CromwellMove> for Standard {
-    fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> CromwellMove {
-        match rng.gen_range(0, 4) {
-            _ => Translation(rand::random()),
-            //            1 => Commutation { axis: rand::random(), i: 0, j: 0 },
-            //            2 => Stabilization,
-            //            _ => Destabilization,
-        }
-    }
+    // A move that replaces a 2x2 sub-grid with an `x` (the opposite of an x-stabilization): currently not supported
+    //Destabilization,
 }
 
 trait KnotGenerator {
@@ -84,6 +67,8 @@ pub struct Diagram {
 
 impl Diagram {
     /// Generates a grid diagram from a .csv file, where each entry is either ` `, `x`, or `o`.
+    /// Internally, a grid diagram maintains a 2D array of `char`s, where the first axis is the rows
+    /// and the second axis is the columns.
     pub fn from_path(path: &Path) -> Result<Diagram, &'static str> {
         if let Some(".csv") = path.extension().and_then(OsStr::to_str) {
             return Err("Only .csv grid files are supported at the moment");
@@ -122,6 +107,7 @@ impl Diagram {
 
     /// Applies a particular Cromwell move to the grid diagram.
     pub fn apply_move(&mut self, cromwell: CromwellMove) -> Result<&mut Self, &'static str> {
+        println!("Grid diagram before Cromwell move:");
         println!("{:?}", self);
         match cromwell {
             CromwellMove::Translation(direction) => match direction {
@@ -174,17 +160,70 @@ impl Diagram {
                         "The specified rows (or columns) are interleaved and cannot be exchanged",
                     );
                 }
-            }
-            _ => (),
-        }
+            },
+            CromwellMove::Stabilization { cardinality, i, j } => {
+                if self.data[i][j] != 'x' {
+                    return Err("There is no `x` at the specified grid position: stabilization cannot be performed");
+                }
 
+                // The cardinal directions below designate the corner of the new 2x2 sub-grid
+                // that contains a "blank" cell (i.e. where the original `x` resided, for an
+                // x-stabilization)
+                match cardinality {
+                    // Add column to the right of the column in question
+                    Cardinality::NW | Cardinality::SW => {
+                        for row in self.data.iter_mut() {
+                            row.insert(j + 1, ' ');
+                        }
+                    }
+                    // Add column to the left of the column in question
+                    _ => {
+                        for row in self.data.iter_mut() {
+                            row.insert(j + 0, ' ');
+                        }
+                    }
+                }
+                self.resolution += 1;
+
+                match cardinality {
+                    Cardinality::NW => {
+                        self.data[i][j + 0] = ' ';
+                        self.data[i][j + 1] = 'x';
+                        let mut extra_row = vec![' '; self.resolution];
+                        extra_row[j + 0] = 'x';
+                        extra_row[j + 1] = 'o';
+                        self.data.insert(i + 1, extra_row);
+                    },
+                    Cardinality::SW => {
+                        self.data[i][j + 0] = ' ';
+                        self.data[i][j + 1] = 'x';
+                        let mut extra_row = vec![' '; self.resolution];
+                        extra_row[j + 0] = 'x';
+                        extra_row[j + 1] = 'o';
+                        self.data.insert(i + 0, extra_row);
+                    },
+                    Cardinality::NE => {
+                        self.data[i][j + 0] = 'x'; // Technically, this is unnecessary
+                        self.data[i][j + 1] = ' ';
+                        let mut extra_row = vec![' '; self.resolution];
+                        extra_row[j + 0] = 'o';
+                        extra_row[j + 1] = 'x';
+                        self.data.insert(i + 1, extra_row);
+                    },
+                    Cardinality::SE => {
+                        self.data[i][j + 0] = 'x'; // Technically, this is unnecessary
+                        self.data[i][j + 1] = ' ';
+                        let mut extra_row = vec![' '; self.resolution];
+                        extra_row[j + 0] = 'o';
+                        extra_row[j + 1] = 'x';
+                        self.data.insert(i + 0, extra_row);
+                    },
+                }
+            }
+        }
+        println!("Grid diagram after Cromwell move:");
         println!("{:?}", self);
         Ok(self)
-    }
-
-    /// Applies a random Cromwell move to the grid diagram.
-    pub fn apply_move_random(&mut self) -> Result<&mut Self, &'static str> {
-        self.apply_move(rand::random())
     }
 
     /// Generates a random, valid grid diagram that may or may not be the unknot.
@@ -215,30 +254,30 @@ impl Diagram {
         self.resolution
     }
 
-    /// Returns a reference to this grid diagram's internal data store.
+    /// Returns an immutable reference to this grid diagram's internal data store.
     pub fn get_data(&self) -> &Vec<Vec<char>> {
         &self.data
     }
 
     /// Sets the values of the `i`th row to `row`.
-    pub fn set_row(&mut self, i: usize, row: &Vec<char>) {
+    fn set_row(&mut self, i: usize, row: &Vec<char>) {
         self.data[i] = row.clone();
     }
 
     /// Sets the values of the `i`th column to `col`.
-    pub fn set_column(&mut self, i: usize, col: &Vec<char>) {
+    fn set_column(&mut self, i: usize, col: &Vec<char>) {
         for (entry, row) in col.iter().zip(self.data.iter_mut()) {
             row[i] = *entry;
         }
     }
 
     /// Returns the `i`th row of the grid diagram.
-    pub fn get_row(&self, i: usize) -> Vec<char> {
+    fn get_row(&self, i: usize) -> Vec<char> {
         self.data[i].clone()
     }
 
     /// Returns the `i`th column of the grid diagram.
-    pub fn get_column(&self, i: usize) -> Vec<char> {
+    fn get_column(&self, i: usize) -> Vec<char> {
         self.data.iter().map(|row| row[i]).collect()
     }
 

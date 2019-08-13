@@ -12,10 +12,7 @@
 //mod gl { include!(concat!(env!("OUT_DIR"), "/bindings.rs")); }
 //mod gl { include!("../target/debug/build/gl-c987f7e774ed107e/out/bindings.rs"); }
 
-extern crate cgmath;
-extern crate csv;
 extern crate gl;
-extern crate glutin;
 
 mod constants;
 mod diagram;
@@ -26,7 +23,7 @@ mod polyline;
 mod program;
 mod tangle;
 
-use crate::diagram::{Axis, CromwellMove, Diagram, Direction};
+use crate::diagram::{Axis, Cardinality, CromwellMove, Diagram, Direction};
 use crate::interaction::InteractionState;
 use crate::polyline::Polyline;
 use crate::program::Program;
@@ -51,7 +48,7 @@ fn set_draw_state() {
         gl::Enable(gl::PROGRAM_POINT_SIZE);
         gl::Enable(gl::DEPTH_TEST);
         gl::DepthFunc(gl::LESS);
-        gl::Disable(gl::CULL_FACE);
+        //gl::Enable(gl::CULL_FACE);
         gl::PolygonMode(gl::FRONT_AND_BACK, gl::LINE);
     }
 }
@@ -81,25 +78,17 @@ fn main() {
     let mut knots = vec![
         Diagram::from_path(Path::new("src/example_diagrams/legendrian_0.csv"))
             .unwrap()
-            .apply_move(CromwellMove::Commutation {
-                axis: Axis::Row,
-                start_index: 3,
-            })
-            .unwrap()
-            .apply_move(CromwellMove::Translation(Direction::Left))
+            .apply_move(CromwellMove::Stabilization{ cardinality: Cardinality::SW, i: 0, j: 5 })
             .unwrap()
             .generate_knot(),
         Diagram::from_path(Path::new("src/example_diagrams/legendrian_0.csv"))
             .unwrap()
+            .apply_move(CromwellMove::Stabilization{ cardinality: Cardinality::SE, i: 0, j: 5 })
+            .unwrap()
             .generate_knot(),
         Diagram::from_path(Path::new("src/example_diagrams/legendrian_0.csv"))
             .unwrap()
-            .apply_move(CromwellMove::Commutation {
-                axis: Axis::Column,
-                start_index: 2,
-            })
-            .unwrap()
-            .apply_move(CromwellMove::Translation(Direction::Right))
+            .apply_move(CromwellMove::Stabilization{ cardinality: Cardinality::NW, i: 0, j: 5 })
             .unwrap()
             .generate_knot(),
     ];
@@ -121,7 +110,7 @@ fn main() {
         Matrix4::from_translation(Vector3::new(11.0, 0.0, 0.0)),
     ];
     let view = Matrix4::look_at(
-        Point3::new(0.0, 0.0, 25.0),
+        Point3::new(0.0, 0.0, 45.0),
         Point3::origin(),
         Vector3::unit_y(),
     );

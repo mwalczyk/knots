@@ -130,7 +130,14 @@ impl Mesh {
     fn enable_attribute(&mut self, attribute: Attribute) {
         unsafe {
             gl::EnableVertexArrayAttrib(self.vao, attribute.get_index());
-            gl::VertexArrayAttribFormat(self.vao, attribute.get_index(), attribute.get_element_count(), gl::FLOAT, gl::FALSE, 0);
+            gl::VertexArrayAttribFormat(
+                self.vao,
+                attribute.get_index(),
+                attribute.get_element_count(),
+                gl::FLOAT,
+                gl::FALSE,
+                0,
+            );
 
             // All attributes are bound to index `0`
             gl::VertexArrayAttribBinding(self.vao, attribute.get_index(), 0);
@@ -170,10 +177,12 @@ impl Mesh {
         }
     }
 
+    /// Returns the number of vertices in this mesh.
     pub fn get_number_of_vertices(&self) -> usize {
         self.positions.len()
     }
 
+    /// Draws the mesh using the specified drawing `mode` (i.e. `gl::TRIANGLES`).
     pub fn draw(&self, mode: GLenum) {
         // TODO: may need to vary the `count` parameter, based on the draw mode
 
@@ -183,6 +192,7 @@ impl Mesh {
         }
     }
 
+    /// Sets the positions of the vertices in this mesh to `positions`.
     pub fn set_positions(&mut self, positions: &Vec<Vector3<f32>>) {
         // TODO: if other attributes are enabled this won't work
 
@@ -212,10 +222,4 @@ impl Mesh {
             );
         }
     }
-}
-
-pub enum Plane {
-    XY,
-    YZ,
-    ZX,
 }

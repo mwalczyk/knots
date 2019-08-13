@@ -147,6 +147,8 @@ pub struct Polyline {
 }
 
 impl Polyline {
+    /// Returns a new, empty polyline. Use `push_vertex(..)` and `pop_vertex(..)` to
+    /// add / remove points.
     pub fn new() -> Polyline {
         Polyline { vertices: vec![] }
     }
@@ -260,10 +262,6 @@ impl Polyline {
         total / count as f32
     }
 
-    pub fn find_intersections(&self) {
-        unimplemented!();
-    }
-
     /// Reference: `https://github.com/openframeworks/openFrameworks/blob/master/libs/openFrameworks/graphics/ofPolyline.inl#L504`
     pub fn refine(&mut self, minimum_segment_length: f32) -> Polyline {
         let mut refined = Polyline::new();
@@ -306,39 +304,40 @@ impl Polyline {
 
         let mut v_prev = Vector3::zero();
 
-        for center_index in 0..=self.get_number_of_vertices() {
-            // TODO: this is some insanely hacky shit...basically, we need the first and
-            //  last tangents to "match up," so we just re-calculate the first ring once
-            //  we reach the end of the loop, using an inclusive range (above)
-            let wrapped_index = center_index % self.get_number_of_vertices();
-
+        // Loop over all of the indices plus the last one to form a closed loop
+        for (true_index, center_index) in (0..self.get_number_of_vertices())
+            .cycle()
+            .take(self.get_number_of_vertices() + 1)
+            .enumerate()
+        {
             let (neighbor_l_index, neighbor_r_index) =
-                self.get_neighboring_indices_wrapped(wrapped_index);
+                self.get_neighboring_indices_wrapped(center_index);
 
-            let center = self.get_vertices()[wrapped_index];
+            // Grab the current vertex plus its two neighbors
+            let center = self.get_vertices()[center_index];
             let neighbor_l = self.get_vertices()[neighbor_l_index];
             let neighbor_r = self.get_vertices()[neighbor_r_index];
 
-            let v1 = (neighbor_l - center).normalize(); // Vector that points towards the left neighbor
-            let v2 = (neighbor_r - center).normalize(); // Vector that points towards the right neighbor
+            let towards_l = (neighbor_l - center).normalize(); // Vector that points towards the left neighbor
+            let towards_r = (neighbor_r - center).normalize(); // Vector that points towards the right neighbor
 
             // Calculate the tangent vector at the current point along the polyline
-            let t_n = if (v2 - v1).magnitude2() > 0.0 {
-                (v2 - v1).normalize()
+            let t = if (towards_r - towards_l).magnitude2() > 0.0 {
+                (towards_r - towards_l).normalize()
             } else {
-                -v1
+                -towards_l
             };
 
             // Calculate the next `u` basis vector
-            let u_n = if wrapped_index == 0 && center_index == 0 {
+            let u = if true_index == 0 {
                 // Find an arbitrary vector perpendicular to the first tangent vector
-                Vector3::unit_z().cross(t_n).normalize()
+                Vector3::unit_z().cross(t).normalize()
             } else {
-                (t_n.cross(v_prev)).normalize()
+                (t.cross(v_prev)).normalize()
             };
 
             // Calculate the next `v` basis vector
-            let v_n = (u_n.cross(t_n)).normalize();
+            let v = (u.cross(t)).normalize();
 
             // Try modifying the radius along the arc:
             let percent = center_index as f32 / self.get_number_of_vertices() as f32;
@@ -348,11 +347,11 @@ impl Polyline {
                 let theta = 2.0 * std::f32::consts::PI * (index as f32 / number_of_segments as f32);
                 let x = radius * theta.cos();
                 let y = radius * theta.sin();
-                tube_vertices.push(u_n * x + v_n * y + center);
+                tube_vertices.push(u * x + v * y + center);
             }
 
             // Set the previous `v` vector to the current `v` vector (parallel transport)
-            v_prev = v_n;
+            v_prev = v;
         }
 
         // Generate the final array of vertices, which are the triangles that enclose the
@@ -375,20 +374,16 @@ impl Polyline {
                 let next_local_index = (local_index + 1) % number_of_segments;
 
                 // First triangle: 0 -> 6 -> 7
-                triangles
-                    .push(tube_vertices[(ring_index + 0) * number_of_segments + (local_index + 0)]);
-                triangles
-                    .push(tube_vertices[next_ring_index * number_of_segments + (local_index + 0)]); // The next ring
+                triangles.push(tube_vertices[ring_index * number_of_segments + local_index]);
+                triangles.push(tube_vertices[next_ring_index * number_of_segments + local_index]); // The next ring
                 triangles
                     .push(tube_vertices[next_ring_index * number_of_segments + next_local_index]); // The next ring
 
                 // Second triangle: 0 -> 7 -> 1
-                triangles
-                    .push(tube_vertices[(ring_index + 0) * number_of_segments + (local_index + 0)]);
+                triangles.push(tube_vertices[ring_index * number_of_segments + local_index]);
                 triangles
                     .push(tube_vertices[next_ring_index * number_of_segments + next_local_index]); // The next ring
-                triangles
-                    .push(tube_vertices[(ring_index + 0) * number_of_segments + next_local_index]);
+                triangles.push(tube_vertices[ring_index * number_of_segments + next_local_index]);
             }
         }
         //println!("len {}", triangles.len());
