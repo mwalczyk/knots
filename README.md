@@ -74,6 +74,7 @@ You can change between wireframe and filled modes by pressing `w` and `f`. You c
 - [ ] Add a GUI for viewing the current grid diagram
 - [ ] Generate the Dowker notation for a given knot diagram
 - [ ] Explore planar graphs and their relationship to knot diagrams
+- [ ] Implement a `tangle` calculator for generating knots (Conway notation)
 
 ## Credits
 This project was largely inspired by and based on previous work done by Dr. Robert Scharein, whose PhD [thesis](https://knotplot.com/thesis/) and [software](https://knotplot.com/) were vital towards my understanding of the relaxation / meshing procedures.
