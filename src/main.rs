@@ -7,7 +7,6 @@
 #![allow(unreachable_patterns)]
 #![allow(non_snake_case)]
 #![feature(clamp)]
-
 // Should be able to do this, but the Intellij plugin doesn't support it yet...
 //mod gl { include!(concat!(env!("OUT_DIR"), "/bindings.rs")); }
 //mod gl { include!("../target/debug/build/gl-c987f7e774ed107e/out/bindings.rs"); }
@@ -28,8 +27,8 @@ use crate::interaction::InteractionState;
 use crate::polyline::Polyline;
 use crate::program::Program;
 use cgmath::{EuclideanSpace, Matrix4, Point3, SquareMatrix, Vector3};
-use glutin::GlContext;
 use core::ffi::c_void;
+use glutin::GlContext;
 use std::fs::File;
 use std::io::Read;
 use std::path::Path;
@@ -42,18 +41,17 @@ fn clear() {
     }
 }
 
+/// Sets the draw state (enables depth testing, etc.)
 fn set_draw_state() {
     unsafe {
-        gl::LineWidth(1.0);
-        gl::PointSize(8.0);
         gl::Enable(gl::PROGRAM_POINT_SIZE);
         gl::Enable(gl::DEPTH_TEST);
         gl::DepthFunc(gl::LESS);
-        //gl::Enable(gl::CULL_FACE);
-        gl::PolygonMode(gl::FRONT_AND_BACK, gl::LINE);
+        gl::Enable(gl::CULL_FACE);
     }
 }
 
+/// A helper function for taking screenshots
 fn save_frame(path: &Path, width: u32, height: u32) {
     let mut pixels: Vec<u8> = Vec::new();
     pixels.reserve((width * height * 3) as usize);
@@ -76,8 +74,8 @@ fn save_frame(path: &Path, width: u32, height: u32) {
     image::save_buffer(path, &pixels, width, height, image::RGB(8)).unwrap();
 }
 
-/// Returns the string contents of the file at `path`.
-pub fn load_file_as_string(path: &Path) -> String {
+/// Returns the string contents of the file at `path`
+fn load_file_as_string(path: &Path) -> String {
     let mut file = File::open(path).expect("File not found");
     let mut contents = String::new();
     file.read_to_string(&mut contents)
@@ -87,6 +85,7 @@ pub fn load_file_as_string(path: &Path) -> String {
 }
 
 fn main() {
+    // Setup the windowing environment
     let mut events_loop = glutin::EventsLoop::new();
     let window = glutin::WindowBuilder::new()
         .with_dimensions(constants::WIDTH, constants::HEIGHT)
@@ -98,8 +97,9 @@ fn main() {
     gl::load_with(|symbol| gl_window.get_proc_address(symbol) as *const _);
 
     // Load a knot diagram from a .csv file
+    let path = Path::new("src/example_diagrams/legendrian_0.csv");
     let mut knots = vec![
-        Diagram::from_path(Path::new("src/example_diagrams/legendrian_0.csv"))
+        Diagram::from_path(path)
             .unwrap()
             .apply_move(CromwellMove::Stabilization {
                 cardinality: Cardinality::SW,
@@ -110,7 +110,7 @@ fn main() {
             .apply_move(CromwellMove::Translation(Direction::Left))
             .unwrap()
             .generate_knot(),
-        Diagram::from_path(Path::new("src/example_diagrams/legendrian_0.csv"))
+        Diagram::from_path(path)
             .unwrap()
             .apply_move(CromwellMove::Stabilization {
                 cardinality: Cardinality::SE,
@@ -119,7 +119,7 @@ fn main() {
             })
             .unwrap()
             .generate_knot(),
-        Diagram::from_path(Path::new("src/example_diagrams/legendrian_0.csv"))
+        Diagram::from_path(path)
             .unwrap()
             .apply_move(CromwellMove::Stabilization {
                 cardinality: Cardinality::NW,
@@ -227,9 +227,9 @@ fn main() {
                                 },
                                 glutin::VirtualKeyCode::H => {
                                     models = vec![
-                                        Matrix4::from_translation(Vector3::new(-11.0, 0.0, 0.0)),
+                                        Matrix4::from_translation(Vector3::new(-14.0, 0.0, 0.0)),
                                         Matrix4::from_translation(Vector3::new(0.0, 0.0, 0.0)),
-                                        Matrix4::from_translation(Vector3::new(11.0, 0.0, 0.0)),
+                                        Matrix4::from_translation(Vector3::new(14.0, 0.0, 0.0)),
                                     ];
                                 }
                                 _ => (),
