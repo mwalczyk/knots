@@ -13,10 +13,14 @@ One interesting way of representing a knot is via a so-called `n`x`n` _grid diag
 2. In each row, connect each `o` to the corresponding `x`
 3. Whenever a horizontal segment intersects a vertical segment, assume that the vertical segment passes _over_ the horizontal segment (i.e. a grid diagram _only_ consists of over-crossings)
 
+Doing so results in a piecewise linear link (polyline). To obtain a "smoother" projection of the knot (i.e. one without sharp corners), we need to perform some form of topological refinement, taking care to not change the underlying structure of the knot. Following Dr. Scharein's thesis (link below), each vertex of the polyline generated above is treated as a particle in a physics simulation. Adjacent vertices are attracted to one another via a mechanical spring force. Non-adjacent particles are repelled from one another via an electrostatic force, which (in practice) prevents segments from crossing over or under one another. A more robust method would perform intersection tests between all pairs of non-neighboring line segments to prevent any "illegal" crossings. This is currently a TODO item.
 
+Before the knot is rendered, a path-guided extrusion is performed to "thicken" the knot.
 
 ### Cromwell Moves
-The Cromwell Moves are similar to the 3 [Reidemeister Moves](https://en.wikipedia.org/wiki/Reidemeister_move), specifically applied to grid diagrams. They all us to obtain isotopic knots, i.e. knots that have the same underlying topology but "look" different. This gives us a way to systematically explore a given knot invariant.
+The Cromwell Moves are similar to the [Reidemeister Moves](https://en.wikipedia.org/wiki/Reidemeister_move), specifically applied to grid diagrams. They all us to obtain isotopic knots, i.e. knots that have the same underlying topology but "look" different. This gives us a way to systematically explore a given knot invariant.
+
+In `knots`, the Cromwell Moves are represented as an `enum`:
 
 ```rust
 enum CromwellMove {
@@ -47,11 +51,19 @@ NOTE: this project will only run on graphics cards that support OpenGL [Direct S
 3. Inside the repo, run: `cargo build --release`.
 
 ## To Use
-All grid diagrams must be "square" `.csv` files (the same number of rows as columns). Each row and column must have _exactly_ one `x` and one `o`: all other entries should be spaces ("blank"). The grid diagram will be validated upon construction, but the program will `panic!` if one of the conditions above is not met.
+All grid diagrams must be "square" `.csv` files (the same number of rows as columns). Each row and column must have _exactly_ one `x` and one `o`: all other entries should be spaces ("blank"). The grid diagram will be validated upon construction, but the program will `panic!` if one of the conditions above is not met. An example grid diagram for the trefoil knot is shown below:
+
+```
+"x"," ","o"," "," "
+" ","x"," ","o"," "
+" "," ","x"," ","o"
+"o"," "," ","x"," "
+" ","o"," "," ","x"
+```
 
 To rotate the camera around the object in 3-dimensions, press + drag the left mouse button. Press `h` to "home" (i.e. reset) the camera.
 
-You can change between wireframe and filled modes by pressing `w` and `f`. You can save out a screenshot by pressing `s`.
+You can change between wireframe and filled modes by pressing `w` and `f`. You can save out a screenshot by pressing `s`. Finally, you can reset the physics simulation by pressing `r`.
 
 ## To Do
 - [ ] Implement a knot "drawing" tool
