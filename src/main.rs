@@ -29,6 +29,7 @@ use crate::polyline::Polyline;
 use crate::program::Program;
 use cgmath::{EuclideanSpace, Matrix4, Point3, SquareMatrix, Vector3};
 use glutin::GlContext;
+use core::ffi::c_void;
 use std::fs::File;
 use std::io::Read;
 use std::path::Path;
@@ -43,7 +44,7 @@ fn clear() {
 
 fn set_draw_state() {
     unsafe {
-        gl::LineWidth(2.0);
+        gl::LineWidth(1.0);
         gl::PointSize(8.0);
         gl::Enable(gl::PROGRAM_POINT_SIZE);
         gl::Enable(gl::DEPTH_TEST);
@@ -51,6 +52,28 @@ fn set_draw_state() {
         //gl::Enable(gl::CULL_FACE);
         gl::PolygonMode(gl::FRONT_AND_BACK, gl::LINE);
     }
+}
+
+fn save_frame(path: &Path, width: u32, height: u32) {
+    let mut pixels: Vec<u8> = Vec::new();
+    pixels.reserve((width * height * 3) as usize);
+
+    unsafe {
+        // We don't want any alignment padding on pixel rows.
+        gl::PixelStorei(gl::PACK_ALIGNMENT, 1);
+        gl::ReadPixels(
+            0,
+            0,
+            width as i32,
+            height as i32,
+            gl::RGB,
+            gl::UNSIGNED_BYTE,
+            pixels.as_mut_ptr() as *mut c_void,
+        );
+        pixels.set_len((width * height * 3) as usize);
+    }
+
+    image::save_buffer(path, &pixels, width, height, image::RGB(8)).unwrap();
 }
 
 /// Returns the string contents of the file at `path`.
@@ -78,17 +101,33 @@ fn main() {
     let mut knots = vec![
         Diagram::from_path(Path::new("src/example_diagrams/legendrian_0.csv"))
             .unwrap()
-            .apply_move(CromwellMove::Stabilization{ cardinality: Cardinality::SW, i: 0, j: 5 })
+            .apply_move(CromwellMove::Stabilization {
+                cardinality: Cardinality::SW,
+                i: 3,
+                j: 2,
+            })
+            .unwrap()
+            .apply_move(CromwellMove::Translation(Direction::Left))
             .unwrap()
             .generate_knot(),
         Diagram::from_path(Path::new("src/example_diagrams/legendrian_0.csv"))
             .unwrap()
-            .apply_move(CromwellMove::Stabilization{ cardinality: Cardinality::SE, i: 0, j: 5 })
+            .apply_move(CromwellMove::Stabilization {
+                cardinality: Cardinality::SE,
+                i: 3,
+                j: 2,
+            })
             .unwrap()
             .generate_knot(),
         Diagram::from_path(Path::new("src/example_diagrams/legendrian_0.csv"))
             .unwrap()
-            .apply_move(CromwellMove::Stabilization{ cardinality: Cardinality::NW, i: 0, j: 5 })
+            .apply_move(CromwellMove::Stabilization {
+                cardinality: Cardinality::NW,
+                i: 3,
+                j: 2,
+            })
+            .unwrap()
+            .apply_move(CromwellMove::Translation(Direction::Up))
             .unwrap()
             .generate_knot(),
     ];
@@ -100,14 +139,14 @@ fn main() {
     )
     .unwrap();
 
-    // Interaction
+    // Interaction (mouse clicks, etc.)
     let mut interaction = InteractionState::new();
 
     // Set up the model-view-projection (MVP) matrices
     let mut models = vec![
-        Matrix4::from_translation(Vector3::new(-11.0, 0.0, 0.0)),
+        Matrix4::from_translation(Vector3::new(-14.0, 0.0, 0.0)),
         Matrix4::from_translation(Vector3::new(0.0, 0.0, 0.0)),
-        Matrix4::from_translation(Vector3::new(11.0, 0.0, 0.0)),
+        Matrix4::from_translation(Vector3::new(14.0, 0.0, 0.0)),
     ];
     let view = Matrix4::look_at(
         Point3::new(0.0, 0.0, 45.0),
@@ -126,7 +165,6 @@ fn main() {
     draw_program.bind();
     draw_program.uniform_matrix_4f("u_view", &view);
     draw_program.uniform_matrix_4f("u_projection", &projection);
-    let mut frame_count = 0;
 
     loop {
         events_loop.poll_events(|event| match event {
@@ -176,7 +214,10 @@ fn main() {
                                     for knot in knots.iter_mut() {
                                         knot.reset();
                                     }
-                                    frame_count = 0;
+                                }
+                                glutin::VirtualKeyCode::S => {
+                                    let path = Path::new("frame.png");
+                                    save_frame(path, constants::WIDTH, constants::HEIGHT);
                                 }
                                 glutin::VirtualKeyCode::F => unsafe {
                                     gl::PolygonMode(gl::FRONT_AND_BACK, gl::FILL);
@@ -206,6 +247,7 @@ fn main() {
 
         draw_program.uniform_2f("u_mouse", &interaction.cursor_curr);
 
+        // Relax each knot and draw it
         for (knot, model) in knots.iter_mut().zip(models.iter()) {
             draw_program.uniform_matrix_4f("u_model", model);
             knot.relax();
@@ -213,7 +255,5 @@ fn main() {
         }
 
         gl_window.swap_buffers().unwrap();
-
-        frame_count += 1;
     }
 }

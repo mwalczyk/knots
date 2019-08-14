@@ -236,9 +236,11 @@ impl Knot {
             let vertices = self.rope.generate_tube(0.5, 12);
             self.mesh.set_positions(&vertices);
             self.mesh.draw(gl::TRIANGLES);
+            self.mesh.draw(gl::POINTS);
         } else {
             self.mesh.set_positions(self.rope.get_vertices());
             self.mesh.draw(gl::LINE_LOOP);
+            self.mesh.draw(gl::POINTS);
         }
     }
 

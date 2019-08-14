@@ -42,11 +42,17 @@ pub enum CromwellMove {
     Translation(Direction),
 
     // A move that exchanges to adjacent, non-interleaved rows or columns
-    Commutation { axis: Axis, start_index: usize },
+    Commutation {
+        axis: Axis,
+        start_index: usize,
+    },
 
     // A move that replaces an `x` with a 2x2 sub-grid
-    Stabilization { cardinality: Cardinality, i: usize, j: usize },
-
+    Stabilization {
+        cardinality: Cardinality,
+        i: usize,
+        j: usize,
+    },
     // A move that replaces a 2x2 sub-grid with an `x` (the opposite of an x-stabilization): currently not supported
     //Destabilization,
 }
@@ -106,6 +112,8 @@ impl Diagram {
     }
 
     /// Applies a particular Cromwell move to the grid diagram.
+    ///
+    /// Reference: `https://arxiv.org/pdf/1903.05893.pdf`
     pub fn apply_move(&mut self, cromwell: CromwellMove) -> Result<&mut Self, &'static str> {
         println!("Grid diagram before Cromwell move:");
         println!("{:?}", self);
@@ -160,7 +168,7 @@ impl Diagram {
                         "The specified rows (or columns) are interleaved and cannot be exchanged",
                     );
                 }
-            },
+            }
             CromwellMove::Stabilization { cardinality, i, j } => {
                 if self.data[i][j] != 'x' {
                     return Err("There is no `x` at the specified grid position: stabilization cannot be performed");
@@ -193,7 +201,7 @@ impl Diagram {
                         extra_row[j + 0] = 'x';
                         extra_row[j + 1] = 'o';
                         self.data.insert(i + 1, extra_row);
-                    },
+                    }
                     Cardinality::SW => {
                         self.data[i][j + 0] = ' ';
                         self.data[i][j + 1] = 'x';
@@ -201,7 +209,7 @@ impl Diagram {
                         extra_row[j + 0] = 'x';
                         extra_row[j + 1] = 'o';
                         self.data.insert(i + 0, extra_row);
-                    },
+                    }
                     Cardinality::NE => {
                         self.data[i][j + 0] = 'x'; // Technically, this is unnecessary
                         self.data[i][j + 1] = ' ';
@@ -209,7 +217,7 @@ impl Diagram {
                         extra_row[j + 0] = 'o';
                         extra_row[j + 1] = 'x';
                         self.data.insert(i + 1, extra_row);
-                    },
+                    }
                     Cardinality::SE => {
                         self.data[i][j + 0] = 'x'; // Technically, this is unnecessary
                         self.data[i][j + 1] = ' ';
@@ -217,7 +225,7 @@ impl Diagram {
                         extra_row[j + 0] = 'o';
                         extra_row[j + 1] = 'x';
                         self.data.insert(i + 0, extra_row);
-                    },
+                    }
                 }
             }
         }
