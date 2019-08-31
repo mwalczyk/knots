@@ -1,6 +1,6 @@
 use crate::constants;
-use crate::mesh::Mesh;
-use crate::polyline::{Polyline, Segment};
+use crate::graphics::mesh::Mesh;
+use crate::graphics::polyline::{Polyline, Segment};
 use cgmath::{InnerSpace, Vector3, Zero};
 
 pub trait Notation {
@@ -22,12 +22,25 @@ struct Stick<'a> {
 
 #[derive(PartialEq)]
 struct Bead {
+    // The position of the bead in 3-space
     position: Vector3<f32>,
+
+    // The velocity of the bead
     velocity: Vector3<f32>,
+
+    // The acceleration of the bead
     acceleration: Vector3<f32>,
+
+    // The index of the polyline vertex corresponding to this bead
     index: usize,
+
+    // The cached index of this bead's left neighbor in the underlying polyline
     neighbor_l_index: usize,
+
+    // The cached index of this bead's right neighbor in the underlying polyline
     neighbor_r_index: usize,
+
+    // Whether or not this bead is active in the physics simulation
     is_stuck: bool,
 }
 
@@ -51,10 +64,7 @@ impl Bead {
 
     /// Returns `true` if this bead and `other` are neighbors and `false` otherwise.
     fn are_neighbors(&self, other: &Bead) -> bool {
-        if self.index == other.neighbor_l_index || self.index == other.neighbor_r_index {
-            return true;
-        }
-        false
+        self.index == other.neighbor_l_index || self.index == other.neighbor_r_index
     }
 
     /// Set the left and right neighbor indices for this bead.
@@ -109,11 +119,11 @@ impl Bead {
 /// refers to a dynamical model, where the underlying polyline is treated as a mass-spring
 /// system.
 pub struct Knot {
-    // The "rope" (polygonal line segment) that is knotted
+    // The "rope" (polygonal line segment) that is knotted and will be animated
     rope: Polyline,
 
     // Anchor (starting) positions
-    anchors: Vec<Vector3<f32>>,
+    anchors: Polyline,
 
     // All of the "beads" (i.e. points with a position, velocity, and acceleration) that make up this knot
     beads: Vec<Bead>,
@@ -138,7 +148,7 @@ impl Knot {
 
         Knot {
             rope: rope.clone(),
-            anchors: rope.get_vertices().clone(),
+            anchors: rope.clone(),
             beads,
             mesh: Mesh::new(&vec![], None, None, None),
         }
@@ -220,10 +230,10 @@ impl Knot {
     /// Resets the physics simulation.
     pub fn reset(&mut self) {
         // First, reset the polyline
-        self.rope.set_vertices(&self.anchors);
+        self.rope = self.anchors.clone();
 
         // Reset all bead positions
-        for (bead, position) in self.beads.iter_mut().zip(self.anchors.iter()) {
+        for (bead, position) in self.beads.iter_mut().zip(self.anchors.get_vertices().iter()) {
             bead.position = *position;
         }
     }
@@ -233,7 +243,12 @@ impl Knot {
     /// a thin line loop.
     pub fn draw(&mut self, extrude: bool) {
         if extrude {
-            let vertices = self.rope.generate_tube(0.5, 12);
+            let vertices = self.rope.generate_tube(
+                0.5,
+                12,
+                Some(&|pct| (pct as f32 * std::f32::consts::PI).sin() * 0.5 + 0.5),
+            );
+
             self.mesh.set_positions(&vertices);
             self.mesh.draw(gl::TRIANGLES);
             self.mesh.draw(gl::POINTS);

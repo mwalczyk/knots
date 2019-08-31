@@ -1,6 +1,6 @@
 use crate::diagram::CromwellMove::{Commutation, Stabilization, Translation};
+use crate::graphics::polyline::Polyline;
 use crate::knot::Knot;
-use crate::polyline::Polyline;
 use cgmath::Vector3;
 use rand::{
     distributions::{Distribution, Standard},
@@ -20,11 +20,14 @@ pub enum Direction {
 }
 
 /// An enum representing an axial direction (either rows or columns).
+#[derive(Debug)]
 pub enum Axis {
     Row,
     Column,
 }
 
+/// An enum representing a cardinal direction (as on a compass).
+#[derive(Debug)]
 pub enum Cardinality {
     NW,
     SW,

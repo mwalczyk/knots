@@ -6,6 +6,8 @@ use std::cmp::max;
 /// A point of intersection along with scalar `s` and `t` values.
 type Intersection = (Vector3<f32>, f32, f32);
 
+/// A struct representing a 3-dimensional line segment with two points: `a` (start)
+/// and `b` (end).
 pub struct Segment {
     a: Vector3<f32>,
     b: Vector3<f32>,
@@ -33,7 +35,7 @@ impl Segment {
 
     /// Returns the midpoint of this line segment.
     pub fn midpoint(&self) -> Vector3<f32> {
-        (self.a + self.b) / 2.0
+        (self.a + self.b) * 0.5
     }
 
     /// Returns the point at `t` along this line segment, where a value
@@ -158,20 +160,28 @@ impl Polyline {
         &self.vertices
     }
 
+    /// Returns a wrapped index. For example, if the polyline has 10 vertices,
+    /// `get_wrapped_index(11)` would return `0` (i.e. the first vertex).
+    pub fn get_wrapped_index(&self, index: usize) -> usize {
+        index % (self.get_number_of_vertices() + 1)
+    }
+
     /// Returns the indices of the "left" and "right" neighbors to the vertex at
     /// index `center_index`. The polyline is assumed to be "closed" so that the
     /// "left" neighbor of the vertex at index `0` is the index of the last vertex
     /// in this polyline, etc.
     pub fn get_neighboring_indices_wrapped(&self, center_index: usize) -> (usize, usize) {
-        let neighbor_l_index = if center_index == 0 {
+        let wrapped_index = self.get_wrapped_index(center_index);
+
+        let neighbor_l_index = if wrapped_index == 0 {
             self.get_number_of_vertices() - 1
         } else {
-            center_index - 1
+            wrapped_index - 1
         };
-        let neighbor_r_index = if center_index == self.get_number_of_vertices() - 1 {
+        let neighbor_r_index = if wrapped_index == self.get_number_of_vertices() - 1 {
             0
         } else {
-            center_index + 1
+            wrapped_index + 1
         };
 
         (neighbor_l_index, neighbor_r_index)
@@ -180,6 +190,11 @@ impl Polyline {
     /// Effectively "clears" this polyline and sets its vertices to `vertices`.
     pub fn set_vertices(&mut self, vertices: &Vec<Vector3<f32>>) {
         self.vertices = vertices.clone();
+    }
+
+    /// Deletes all of the vertices that make up this polyline.
+    pub fn clear(&mut self) {
+        self.vertices.clear();
     }
 
     /// Adds a new vertex `v` to the end of the polyline.
@@ -203,6 +218,7 @@ impl Polyline {
     pub fn point_at(&self, t: f32) -> Vector3<f32> {
         assert!(self.vertices.len() > 0 && t >= 0.0 && t <= 1.0);
 
+        // Short-cut: is this the first or last vertex of the polyline?
         if t == 0.0 {
             return self.vertices[0];
         } else if t == 1.0 {
@@ -297,7 +313,12 @@ impl Polyline {
     /// `https://stackoverflow.com/questions/5088275/opengl-tube-along-a-path`
     ///
     /// Thesis (section `4.2`): `https://knotplot.com/thesis/thesis_letter.pdf`
-    pub fn generate_tube(&self, mut radius: f32, number_of_segments: usize) -> Vec<Vector3<f32>> {
+    pub fn generate_tube(
+        &self,
+        mut radius: f32,
+        number_of_segments: usize,
+        radius_modifier: Option<&dyn Fn(f32) -> f32>,
+    ) -> Vec<Vector3<f32>> {
         let circle_normal: Vector3<f32> = Vector3::unit_y();
         let circle_center: Vector3<f32> = Vector3::zero();
         let mut tube_vertices = vec![];
@@ -339,9 +360,11 @@ impl Polyline {
             // Calculate the next `v` basis vector
             let v = (u.cross(t)).normalize();
 
-            // Try modifying the radius along the arc:
-            let percent = center_index as f32 / self.get_number_of_vertices() as f32;
-            radius = (percent * std::f32::consts::PI).sin() * 0.5 + 0.5;
+            // Modify the radius along the arc
+            if let Some(modifier) = radius_modifier {
+                let percent = center_index as f32 / self.get_number_of_vertices() as f32;
+                radius = modifier(percent);
+            }
 
             for index in 0..number_of_segments {
                 let theta = 2.0 * std::f32::consts::PI * (index as f32 / number_of_segments as f32);

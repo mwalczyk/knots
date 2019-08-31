@@ -1,11 +1,10 @@
-use crate::polyline::Polyline;
 use cgmath::{EuclideanSpace, InnerSpace, Matrix3, Point3, Vector2, Vector3, Zero};
 use gl;
 use gl::types::*;
 use std::mem;
 use std::ptr;
 
-enum Attribute {
+pub enum Attribute {
     POSITIONS,
     COLORS,
     NORMALS,
@@ -27,6 +26,10 @@ impl Attribute {
             Attribute::TEXCOORDS => mem::size_of::<Vector2<f32>>(),
             _ => mem::size_of::<Vector3<f32>>(),
         }
+    }
+
+    pub fn get_relative_offset(&self) -> usize {
+        self.get_index() as usize * mem::size_of::<Vector3<f32>>()
     }
 
     pub fn get_element_count(&self) -> i32 {
@@ -68,7 +71,8 @@ impl Mesh {
         mesh
     }
 
-    pub fn allocate(&mut self) {
+    /// Allocates all OpenGL objects necessary for rendering this mesh.
+    fn allocate(&mut self) {
         unsafe {
             // First, initialize the vertex array object
             gl::CreateVertexArrays(1, &mut self.vao);
@@ -127,8 +131,10 @@ impl Mesh {
         }
     }
 
+    /// Activates the vertex `attribute` (i.e. colors, normals, etc.).
     fn enable_attribute(&mut self, attribute: Attribute) {
         unsafe {
+
             gl::EnableVertexArrayAttrib(self.vao, attribute.get_index());
             gl::VertexArrayAttribFormat(
                 self.vao,
@@ -136,10 +142,10 @@ impl Mesh {
                 attribute.get_element_count(),
                 gl::FLOAT,
                 gl::FALSE,
-                0,
+                attribute.get_relative_offset() as u32,
             );
 
-            // All attributes are bound to index `0`
+            // All attributes are bound to index `0` and interleaved in the same VBO
             gl::VertexArrayAttribBinding(self.vao, attribute.get_index(), 0);
         }
     }
@@ -220,6 +226,51 @@ impl Mesh {
                 size,
                 self.vertex_data.as_ptr() as *const GLvoid,
             );
+        }
+    }
+
+    /// Sets this meshes vertex colors.
+    pub fn set_colors(&mut self, colors: &Vec<Vector3<f32>>) {
+        // If this attribute wasn't already enabled, enable it and rebuild OpenGL objects as
+        // necessary
+        if let None = self.colors {
+            self.enable_attribute(Attribute::COLORS);
+
+            self.colors = Some(colors.clone());
+            self.allocate();
+        } else {
+            self.colors = Some(colors.clone());
+            self.generate_vertex_data();
+        }
+    }
+
+    /// Sets this meshes vertex normals.
+    pub fn set_normals(&mut self, normals: &Vec<Vector3<f32>>) {
+        // If this attribute wasn't already enabled, enable it and rebuild OpenGL objects as
+        // necessary
+        if let None = self.normals {
+            self.enable_attribute(Attribute::NORMALS);
+
+            self.normals = Some(normals.clone());
+            self.allocate();
+        } else {
+            self.normals = Some(normals.clone());
+            self.generate_vertex_data();
+        }
+    }
+
+    /// Sets this meshes vertex texture coordinates.
+    pub fn set_texcoords(&mut self, texcoords: &Vec<Vector2<f32>>) {
+        // If this attribute wasn't already enabled, enable it and rebuild OpenGL objects as
+        // necessary
+        if let None = self.texcoords {
+            self.enable_attribute(Attribute::TEXCOORDS);
+
+            self.texcoords = Some(texcoords.clone());
+            self.allocate();
+        } else {
+            self.texcoords = Some(texcoords.clone());
+            self.generate_vertex_data();
         }
     }
 }

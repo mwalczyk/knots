@@ -15,22 +15,17 @@ extern crate gl;
 
 mod constants;
 mod diagram;
+mod graphics;
 mod interaction;
 mod knot;
-mod mesh;
-mod polyline;
-mod program;
 mod tangle;
+mod utils;
 
 use crate::diagram::{Axis, Cardinality, CromwellMove, Diagram, Direction};
+use crate::graphics::program::Program;
 use crate::interaction::InteractionState;
-use crate::polyline::Polyline;
-use crate::program::Program;
 use cgmath::{EuclideanSpace, Matrix4, Point3, SquareMatrix, Vector3};
-use core::ffi::c_void;
 use glutin::GlContext;
-use std::fs::File;
-use std::io::Read;
 use std::path::Path;
 
 /// Clears the default OpenGL framebuffer (color and depth)
@@ -44,44 +39,16 @@ fn clear() {
 /// Sets the draw state (enables depth testing, etc.)
 fn set_draw_state() {
     unsafe {
+        // Allow us to set the point size programmatically in our vertex shaders
         gl::Enable(gl::PROGRAM_POINT_SIZE);
+
+        // Turn on depth testing
         gl::Enable(gl::DEPTH_TEST);
         gl::DepthFunc(gl::LESS);
+
+        // Turn on back-face culling
         gl::Enable(gl::CULL_FACE);
     }
-}
-
-/// A helper function for taking screenshots
-fn save_frame(path: &Path, width: u32, height: u32) {
-    let mut pixels: Vec<u8> = Vec::new();
-    pixels.reserve((width * height * 3) as usize);
-
-    unsafe {
-        // We don't want any alignment padding on pixel rows.
-        gl::PixelStorei(gl::PACK_ALIGNMENT, 1);
-        gl::ReadPixels(
-            0,
-            0,
-            width as i32,
-            height as i32,
-            gl::RGB,
-            gl::UNSIGNED_BYTE,
-            pixels.as_mut_ptr() as *mut c_void,
-        );
-        pixels.set_len((width * height * 3) as usize);
-    }
-
-    image::save_buffer(path, &pixels, width, height, image::RGB(8)).unwrap();
-}
-
-/// Returns the string contents of the file at `path`
-fn load_file_as_string(path: &Path) -> String {
-    let mut file = File::open(path).expect("File not found");
-    let mut contents = String::new();
-    file.read_to_string(&mut contents)
-        .expect("Something went wrong reading the file");
-
-    contents
 }
 
 fn main() {
@@ -97,7 +64,7 @@ fn main() {
     gl::load_with(|symbol| gl_window.get_proc_address(symbol) as *const _);
 
     // Load a knot diagram from a .csv file
-    let path = Path::new("src/example_diagrams/legendrian_0.csv");
+    let path = Path::new("diagrams/legendrian.csv");
     let mut knots = vec![
         Diagram::from_path(path)
             .unwrap()
@@ -134,8 +101,8 @@ fn main() {
 
     // Set up OpenGL shader programs for rendering
     let draw_program = Program::two_stage(
-        load_file_as_string(Path::new("shaders/draw.vert")),
-        load_file_as_string(Path::new("shaders/draw.frag")),
+        utils::load_file_as_string(Path::new("shaders/draw.vert")),
+        utils::load_file_as_string(Path::new("shaders/draw.frag")),
     )
     .unwrap();
 
@@ -144,9 +111,9 @@ fn main() {
 
     // Set up the model-view-projection (MVP) matrices
     let mut models = vec![
-        Matrix4::from_translation(Vector3::new(-14.0, 0.0, 0.0)),
+        Matrix4::from_translation(Vector3::new(-15.0, 0.0, 0.0)),
         Matrix4::from_translation(Vector3::new(0.0, 0.0, 0.0)),
-        Matrix4::from_translation(Vector3::new(14.0, 0.0, 0.0)),
+        Matrix4::from_translation(Vector3::new(15.0, 0.0, 0.0)),
     ];
     let view = Matrix4::look_at(
         Point3::new(0.0, 0.0, 45.0),
@@ -217,7 +184,7 @@ fn main() {
                                 }
                                 glutin::VirtualKeyCode::S => {
                                     let path = Path::new("frame.png");
-                                    save_frame(path, constants::WIDTH, constants::HEIGHT);
+                                    utils::save_frame(path, constants::WIDTH, constants::HEIGHT);
                                 }
                                 glutin::VirtualKeyCode::F => unsafe {
                                     gl::PolygonMode(gl::FRONT_AND_BACK, gl::FILL);
