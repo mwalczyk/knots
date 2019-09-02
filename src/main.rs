@@ -100,7 +100,7 @@ fn main() {
     ];
 
     // Set up OpenGL shader programs for rendering
-    let draw_program = Program::two_stage(
+    let draw_program = Program::from_sources(
         utils::load_file_as_string(Path::new("shaders/draw.vert")),
         utils::load_file_as_string(Path::new("shaders/draw.frag")),
     )
@@ -194,9 +194,9 @@ fn main() {
                                 },
                                 glutin::VirtualKeyCode::H => {
                                     models = vec![
-                                        Matrix4::from_translation(Vector3::new(-14.0, 0.0, 0.0)),
+                                        Matrix4::from_translation(Vector3::new(-15.0, 0.0, 0.0)),
                                         Matrix4::from_translation(Vector3::new(0.0, 0.0, 0.0)),
-                                        Matrix4::from_translation(Vector3::new(14.0, 0.0, 0.0)),
+                                        Matrix4::from_translation(Vector3::new(15.0, 0.0, 0.0)),
                                     ];
                                 }
                                 _ => (),

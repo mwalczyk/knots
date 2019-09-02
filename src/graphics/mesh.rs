@@ -72,18 +72,12 @@ impl Mesh {
     }
 
     /// Allocates all OpenGL objects necessary for rendering this mesh.
-    fn allocate(&mut self) {
+    fn allocate(&mut self) -> Result<(), &'static str> {
         unsafe {
             // First, initialize the vertex array object
             gl::CreateVertexArrays(1, &mut self.vao);
 
             // Enable the `0`th attribute (positions), which is required
-            //
-            // Then, set the attribute format:
-            // positions -> 3 floats (x, y, z)
-            // colors -> 3 floats (r, g, b)
-            // normals -> 3 floats (x, y, z)
-            // texture coordinates -> 2 floats (u, v)
             self.enable_attribute(Attribute::POSITIONS);
 
             let mut total_size = mem::size_of::<Vector3<f32>>() * self.positions.len();
@@ -92,19 +86,29 @@ impl Mesh {
             // Do the same for the other 3 attributes (if they are enabled), whilst calculating
             // the actual stride in between each vertex
             if let Some(colors) = &self.colors {
-                assert_eq!(self.positions.len(), colors.len());
+                if self.positions.len() != colors.len() {
+                    return Err(
+                        "The number of colors does not equal the number of vertex positions",
+                    );
+                }
                 total_size += mem::size_of::<Vector3<f32>>() * colors.len();
                 actual_stride += mem::size_of::<Vector3<f32>>();
                 self.enable_attribute(Attribute::COLORS);
             }
             if let Some(normals) = &self.normals {
-                assert_eq!(self.positions.len(), normals.len());
+                if self.positions.len() != normals.len() {
+                    return Err(
+                        "The number of normals does not equal the number of vertex positions",
+                    );
+                }
                 total_size += mem::size_of::<Vector3<f32>>() * normals.len();
                 actual_stride += mem::size_of::<Vector3<f32>>();
                 self.enable_attribute(Attribute::NORMALS);
             }
             if let Some(texcoords) = &self.texcoords {
-                assert_eq!(self.positions.len(), texcoords.len());
+                if self.positions.len() != texcoords.len() {
+                    return Err("The number of texture coordinates does not equal the number of vertex positions");
+                }
                 total_size += mem::size_of::<Vector2<f32>>() * texcoords.len();
                 actual_stride += mem::size_of::<Vector2<f32>>();
                 self.enable_attribute(Attribute::TEXCOORDS);
@@ -129,12 +133,13 @@ impl Mesh {
                 actual_stride as i32,
             );
         }
+
+        Ok(())
     }
 
     /// Activates the vertex `attribute` (i.e. colors, normals, etc.).
     fn enable_attribute(&mut self, attribute: Attribute) {
         unsafe {
-
             gl::EnableVertexArrayAttrib(self.vao, attribute.get_index());
             gl::VertexArrayAttribFormat(
                 self.vao,
@@ -156,30 +161,35 @@ impl Mesh {
         self.vertex_data = vec![];
 
         for index in 0..self.positions.len() {
-            self.vertex_data.extend_from_slice(&[
-                self.positions[index].x,
-                self.positions[index].y,
-                self.positions[index].z,
-            ]);
+            self.vertex_data
+                .extend_from_slice(&Into::<[f32; 3]>::into(self.positions[index]));
 
             if let Some(colors) = &self.colors {
-                self.vertex_data.extend_from_slice(&[
-                    colors[index].x,
-                    colors[index].y,
-                    colors[index].z,
-                ]);
+                self.vertex_data
+                    .extend_from_slice(&Into::<[f32; 3]>::into(colors[index]));
             }
             if let Some(normals) = &self.normals {
-                self.vertex_data.extend_from_slice(&[
-                    normals[index].x,
-                    normals[index].y,
-                    normals[index].z,
-                ]);
+                self.vertex_data
+                    .extend_from_slice(&Into::<[f32; 3]>::into(normals[index]));
             }
             if let Some(texcoords) = &self.texcoords {
                 self.vertex_data
-                    .extend_from_slice(&[texcoords[index].x, texcoords[index].y]);
+                    .extend_from_slice(&Into::<[f32; 2]>::into(texcoords[index]));
             }
+        }
+    }
+
+    /// Uploads the interleaved vertex data to the GPU.
+    fn upload_vertex_data(&mut self) {
+        let size = (self.vertex_data.len() * (mem::size_of::<f32>() as usize)) as GLsizeiptr;
+
+        unsafe {
+            gl::NamedBufferSubData(
+                self.vbo,
+                0,
+                size,
+                self.vertex_data.as_ptr() as *const GLvoid,
+            );
         }
     }
 
@@ -190,8 +200,6 @@ impl Mesh {
 
     /// Draws the mesh using the specified drawing `mode` (i.e. `gl::TRIANGLES`).
     pub fn draw(&self, mode: GLenum) {
-        // TODO: may need to vary the `count` parameter, based on the draw mode
-
         unsafe {
             gl::BindVertexArray(self.vao);
             gl::DrawArrays(mode, 0, self.get_number_of_vertices() as GLsizei);
@@ -200,8 +208,6 @@ impl Mesh {
 
     /// Sets the positions of the vertices in this mesh to `positions`.
     pub fn set_positions(&mut self, positions: &Vec<Vector3<f32>>) {
-        // TODO: if other attributes are enabled this won't work
-
         let size_changed = self.get_number_of_vertices() != positions.len();
 
         // Always copy new positions to CPU-side buffer (small penalty here)
@@ -214,18 +220,7 @@ impl Mesh {
             self.allocate();
         } else {
             self.generate_vertex_data();
-        }
-
-        // Upload new data to the GPU
-        let size = (self.vertex_data.len() * (mem::size_of::<f32>() as usize)) as GLsizeiptr;
-
-        unsafe {
-            gl::NamedBufferSubData(
-                self.vbo,
-                0,
-                size,
-                self.vertex_data.as_ptr() as *const GLvoid,
-            );
+            self.upload_vertex_data();
         }
     }
 
@@ -241,6 +236,7 @@ impl Mesh {
         } else {
             self.colors = Some(colors.clone());
             self.generate_vertex_data();
+            self.upload_vertex_data();
         }
     }
 
@@ -256,6 +252,7 @@ impl Mesh {
         } else {
             self.normals = Some(normals.clone());
             self.generate_vertex_data();
+            self.upload_vertex_data();
         }
     }
 
@@ -271,6 +268,7 @@ impl Mesh {
         } else {
             self.texcoords = Some(texcoords.clone());
             self.generate_vertex_data();
+            self.upload_vertex_data();
         }
     }
 }

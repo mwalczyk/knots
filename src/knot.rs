@@ -233,7 +233,11 @@ impl Knot {
         self.rope = self.anchors.clone();
 
         // Reset all bead positions
-        for (bead, position) in self.beads.iter_mut().zip(self.anchors.get_vertices().iter()) {
+        for (bead, position) in self
+            .beads
+            .iter_mut()
+            .zip(self.anchors.get_vertices().iter())
+        {
             bead.position = *position;
         }
     }

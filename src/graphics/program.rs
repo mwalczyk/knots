@@ -28,12 +28,12 @@ impl Program {
         unsafe {
             shader = gl::CreateShader(stage);
 
-            // Attempt to compile the shader.
+            // Attempt to compile the shader
             let c_str = CString::new(src.as_bytes()).unwrap();
             gl::ShaderSource(shader, 1, &c_str.as_ptr(), ptr::null());
             gl::CompileShader(shader);
 
-            // Get the compile status.
+            // Get the compile status
             let mut status = gl::FALSE as GLint;
             gl::GetShaderiv(shader, gl::COMPILE_STATUS, &mut status);
 
@@ -43,7 +43,7 @@ impl Program {
                 gl::GetShaderiv(shader, gl::INFO_LOG_LENGTH, &mut len);
                 let mut buffer = Vec::with_capacity(len as usize);
 
-                // Subtract 1 to skip the trailing null character.
+                // Subtract 1 to skip the trailing null character
                 buffer.set_len((len as usize) - 1);
 
                 gl::GetShaderInfoLog(
@@ -56,6 +56,7 @@ impl Program {
                 let error = String::from_utf8(buffer)
                     .ok()
                     .expect("ShaderInfoLog not valid utf8");
+
                 return Err(error);
             }
         }
@@ -63,61 +64,25 @@ impl Program {
         Ok(shader)
     }
 
-    fn link_single_stage_program(cs: GLuint) -> Result<GLuint, String> {
-        unsafe {
-            let program = gl::CreateProgram();
-            gl::AttachShader(program, cs);
-            gl::LinkProgram(program);
-
-            // Get the link status.
-            let mut status = gl::FALSE as GLint;
-            gl::GetProgramiv(program, gl::LINK_STATUS, &mut status);
-
-            // If there was an error, return the error string.
-            if status != (gl::TRUE as GLint) {
-                let mut len: GLint = 0;
-                gl::GetProgramiv(program, gl::INFO_LOG_LENGTH, &mut len);
-                let mut buffer = Vec::with_capacity(len as usize);
-
-                // Subtract 1 to skip the trailing null character.
-                buffer.set_len((len as usize) - 1);
-
-                gl::GetProgramInfoLog(
-                    program,
-                    len,
-                    ptr::null_mut(),
-                    buffer.as_mut_ptr() as *mut GLchar,
-                );
-                gl::DeleteShader(cs);
-
-                let error = String::from_utf8(buffer)
-                    .ok()
-                    .expect("ProgramInfoLog not valid utf8");
-                return Err(error);
-            }
-
-            Ok(program)
-        }
-    }
-
-    fn link_two_stage_program(vs: GLuint, fs: GLuint) -> Result<GLuint, String> {
+    /// Links the shader program.
+    fn link_program(vs: GLuint, fs: GLuint) -> Result<GLuint, String> {
         unsafe {
             let program = gl::CreateProgram();
             gl::AttachShader(program, vs);
             gl::AttachShader(program, fs);
             gl::LinkProgram(program);
 
-            // Get the link status.
+            // Get the link status
             let mut status = gl::FALSE as GLint;
             gl::GetProgramiv(program, gl::LINK_STATUS, &mut status);
 
-            // If there was an error, return the error string.
+            // If there was an error, return the error string
             if status != (gl::TRUE as GLint) {
                 let mut len: GLint = 0;
                 gl::GetProgramiv(program, gl::INFO_LOG_LENGTH, &mut len);
                 let mut buffer = Vec::with_capacity(len as usize);
 
-                // Subtract 1 to skip the trailing null character.
+                // Subtract 1 to skip the trailing null character
                 buffer.set_len((len as usize) - 1);
 
                 gl::GetProgramInfoLog(
@@ -140,57 +105,14 @@ impl Program {
     }
 
     /// Compiles a two-stage (vertex + fragment) shader from source.
-    pub fn two_stage(vs_src: String, fs_src: String) -> Option<Program> {
-        // Make sure that compiling each of the shaders was successful.
-        let compile_vs_res = Program::compile_shader(&vs_src, gl::VERTEX_SHADER);
-        let compile_fs_res = Program::compile_shader(&fs_src, gl::FRAGMENT_SHADER);
+    pub fn from_sources(vs_src: String, fs_src: String) -> Result<Program, String> {
+        // Make sure that compiling each of the shaders was successful
+        let vs_id = Program::compile_shader(&vs_src, gl::VERTEX_SHADER)?;
+        let fs_id = Program::compile_shader(&fs_src, gl::FRAGMENT_SHADER)?;
 
-        match (compile_vs_res, compile_fs_res) {
-            (Ok(vs_id), Ok(fs_id)) => {
-                // Make sure that linking the shader program was successful.
-                if let Ok(id) = Program::link_two_stage_program(vs_id, fs_id) {
-                    // If everything went ok, return the shader program.
-                    return Some(Program { id });
-                } else {
-                    return None;
-                }
-            }
-            // Both shader stages resulted in an error.
-            (Err(vs_err), Err(fs_err)) => {
-                println!("{}", vs_err);
-                println!("{}", fs_err);
-                return None;
-            }
-            // The vertex shader resulted in an error.
-            (Err(vs_err), Ok(_)) => {
-                println!("{}", vs_err);
-                return None;
-            }
-            // The fragment shader resulted in an error.
-            (Ok(_), Err(fs_err)) => {
-                println!("{}", fs_err);
-                return None;
-            }
-        }
-    }
+        let id = Program::link_program(vs_id, fs_id)?;
 
-    /// Compiles a single-stage (compute) shader from source.
-    pub fn single_stage(cs_src: String) -> Option<Program> {
-        let compile_cs_res = Program::compile_shader(&cs_src, gl::COMPUTE_SHADER);
-
-        match compile_cs_res {
-            Ok(cs_id) => {
-                if let Ok(id) = Program::link_single_stage_program(cs_id) {
-                    return Some(Program { id });
-                } else {
-                    return None;
-                }
-            }
-            Err(cs_err) => {
-                println!("{}", cs_err);
-                return None;
-            }
-        }
+        Ok(Program { id })
     }
 
     /// Binds this shader program.
@@ -232,6 +154,20 @@ impl Program {
         }
     }
 
+    pub fn uniform_2i(&self, name: &str, value: &cgmath::Vector2<i32>) {
+        unsafe {
+            let location = gl::GetUniformLocation(self.id, CString::new(name).unwrap().as_ptr());
+            gl::ProgramUniform2iv(self.id, location, 1, value.as_ptr());
+        }
+    }
+
+    pub fn uniform_2ui(&self, name: &str, value: &cgmath::Vector2<u32>) {
+        unsafe {
+            let location = gl::GetUniformLocation(self.id, CString::new(name).unwrap().as_ptr());
+            gl::ProgramUniform2uiv(self.id, location, 1, value.as_ptr());
+        }
+    }
+
     pub fn uniform_2f(&self, name: &str, value: &cgmath::Vector2<f32>) {
         unsafe {
             let location = gl::GetUniformLocation(self.id, CString::new(name).unwrap().as_ptr());
@@ -239,10 +175,38 @@ impl Program {
         }
     }
 
+    pub fn uniform_3i(&self, name: &str, value: &cgmath::Vector3<i32>) {
+        unsafe {
+            let location = gl::GetUniformLocation(self.id, CString::new(name).unwrap().as_ptr());
+            gl::ProgramUniform3iv(self.id, location, 1, value.as_ptr());
+        }
+    }
+
+    pub fn uniform_3ui(&self, name: &str, value: &cgmath::Vector3<u32>) {
+        unsafe {
+            let location = gl::GetUniformLocation(self.id, CString::new(name).unwrap().as_ptr());
+            gl::ProgramUniform3uiv(self.id, location, 1, value.as_ptr());
+        }
+    }
+
     pub fn uniform_3f(&self, name: &str, value: &cgmath::Vector3<f32>) {
         unsafe {
             let location = gl::GetUniformLocation(self.id, CString::new(name).unwrap().as_ptr());
             gl::ProgramUniform3fv(self.id, location, 1, value.as_ptr());
+        }
+    }
+
+    pub fn uniform_4i(&self, name: &str, value: &cgmath::Vector4<i32>) {
+        unsafe {
+            let location = gl::GetUniformLocation(self.id, CString::new(name).unwrap().as_ptr());
+            gl::ProgramUniform4iv(self.id, location, 1, value.as_ptr());
+        }
+    }
+
+    pub fn uniform_4ui(&self, name: &str, value: &cgmath::Vector4<u32>) {
+        unsafe {
+            let location = gl::GetUniformLocation(self.id, CString::new(name).unwrap().as_ptr());
+            gl::ProgramUniform4uiv(self.id, location, 1, value.as_ptr());
         }
     }
 
