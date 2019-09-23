@@ -1,7 +1,7 @@
 use crate::diagram::CromwellMove::{Commutation, Stabilization, Translation};
-use crate::graphics::polyline::Polyline;
 use crate::knot::Knot;
 use cgmath::Vector3;
+use graphics_utils::polyline::Polyline;
 use rand::{
     distributions::{Distribution, Standard},
     Rng,

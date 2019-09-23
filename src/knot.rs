@@ -1,7 +1,8 @@
 use crate::constants;
-use crate::graphics::mesh::Mesh;
-use crate::graphics::polyline::{Polyline, Segment};
+
 use cgmath::{InnerSpace, Vector3, Zero};
+use graphics_utils::mesh::Mesh;
+use graphics_utils::polyline::{Polyline, Segment};
 
 pub trait Notation {
     fn generate(&self) -> &str;
@@ -150,7 +151,7 @@ impl Knot {
             rope: rope.clone(),
             anchors: rope.clone(),
             beads,
-            mesh: Mesh::new(&vec![], None, None, None),
+            mesh: Mesh::new(&vec![], None, None, None).unwrap(),
         }
     }
 

@@ -15,17 +15,16 @@ extern crate gl;
 
 mod constants;
 mod diagram;
-mod graphics;
 mod interaction;
 mod knot;
 mod tangle;
 mod utils;
 
 use crate::diagram::{Axis, Cardinality, CromwellMove, Diagram, Direction};
-use crate::graphics::program::Program;
 use crate::interaction::InteractionState;
 use cgmath::{EuclideanSpace, Matrix4, Point3, SquareMatrix, Vector3};
 use glutin::GlContext;
+use graphics_utils::program::Program;
 use std::path::Path;
 
 /// Clears the default OpenGL framebuffer (color and depth)

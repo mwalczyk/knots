@@ -7,10 +7,13 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-gl = "0.6.5"
+gl = "0.13.0"
 glutin = "0.10.1"
-cgmath = "0.15.0"
+cgmath = "0.17.0"
 csv = "1.1.1"
 noise = "0.5.1"
 rand = "0.7.0"
 image = "0.18.0"
+
+graphics_utils = { git = "https://github.com/mwalczyk/graphics_utils" }
+
