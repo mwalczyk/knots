@@ -6,7 +6,7 @@
 #![allow(unreachable_code)]
 #![allow(unreachable_patterns)]
 #![allow(non_snake_case)]
-#![feature(clamp)]
+//#![feature(clamp)]
 // Should be able to do this, but the Intellij plugin doesn't support it yet...
 //mod gl { include!(concat!(env!("OUT_DIR"), "/bindings.rs")); }
 //mod gl { include!("../target/debug/build/gl-c987f7e774ed107e/out/bindings.rs"); }
@@ -63,39 +63,11 @@ fn main() {
     gl::load_with(|symbol| gl_window.get_proc_address(symbol) as *const _);
 
     // Load a knot diagram from a .csv file
-    let path = Path::new("diagrams/legendrian.csv");
+    //https://web.math.princeton.edu/~petero/GridHomologyBook.pdf
     let mut knots = vec![
-        Diagram::from_path(path)
+        Diagram::from_path(Path::new("diagrams/kinoshita_terasaka.csv"))
             .unwrap()
-            .apply_move(CromwellMove::Stabilization {
-                cardinality: Cardinality::SW,
-                i: 3,
-                j: 2,
-            })
-            .unwrap()
-            .apply_move(CromwellMove::Translation(Direction::Left))
-            .unwrap()
-            .generate_knot(),
-        Diagram::from_path(path)
-            .unwrap()
-            .apply_move(CromwellMove::Stabilization {
-                cardinality: Cardinality::SE,
-                i: 3,
-                j: 2,
-            })
-            .unwrap()
-            .generate_knot(),
-        Diagram::from_path(path)
-            .unwrap()
-            .apply_move(CromwellMove::Stabilization {
-                cardinality: Cardinality::NW,
-                i: 3,
-                j: 2,
-            })
-            .unwrap()
-            .apply_move(CromwellMove::Translation(Direction::Up))
-            .unwrap()
-            .generate_knot(),
+            .generate_knot()
     ];
 
     // Set up OpenGL shader programs for rendering
@@ -110,12 +82,12 @@ fn main() {
 
     // Set up the model-view-projection (MVP) matrices
     let mut models = vec![
-        Matrix4::from_translation(Vector3::new(-15.0, 0.0, 0.0)),
+        Matrix4::from_translation(Vector3::new(0.0, 0.0, 0.0)),
         Matrix4::from_translation(Vector3::new(0.0, 0.0, 0.0)),
         Matrix4::from_translation(Vector3::new(15.0, 0.0, 0.0)),
     ];
     let view = Matrix4::look_at(
-        Point3::new(0.0, 0.0, 45.0),
+        Point3::new(0.0, 0.0, 40.0),
         Point3::origin(),
         Vector3::unit_y(),
     );
