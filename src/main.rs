@@ -65,7 +65,7 @@ fn main() {
     // Load a knot diagram from a .csv file
     //https://web.math.princeton.edu/~petero/GridHomologyBook.pdf
     let mut knots = vec![
-        Diagram::from_path(Path::new("diagrams/kinoshita_terasaka.csv"))
+        Diagram::from_path(Path::new("diagrams/trefoil.csv"))
             .unwrap()
             .generate_knot()
     ];

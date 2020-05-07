@@ -428,6 +428,8 @@ impl Diagram {
             traverse_horizontal = !traverse_horizontal;
         }
 
+        println!("{:?}", knot_topology);
+
         // If we want to traverse just rows or just columns, we can simply use the underlying knot
         // topology and ignore either the first or last element
         let mut rows = knot_topology.clone();
@@ -511,7 +513,7 @@ impl Diagram {
             }
             //println!("   New topology: {:?}", knot_topology);
         }
-
+        println!("   New topology: {:?}", knot_topology);
         // Ex: old topology vs. new topology (after crossings are inserted)
         //
         // `[1, 4, 28, __, 26, 8, _, 6, 18, __, 21, 33, 35, 17, __, __, 13, 1]`

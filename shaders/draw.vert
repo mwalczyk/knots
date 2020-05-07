@@ -36,7 +36,7 @@ vec3 palette(in float t, in vec3 a, in vec3 b, in vec3 c, in vec3 d)
 void main()
 {
     // Generate a color from the position of this vertex (this is pretty arbitrary at the moment)
-    vec3 world_space_modified = abs(position / 8.0) * 0.5 + 0.5;
+    vec3 world_space_modified = abs(position / 12.0) * 0.5 + 0.5;
     //world_space_modified.z = sqrt(world_space_modified.z * 24.0);
     vs_out.color = hsv_to_rgb(vec3(world_space_modified.zyx) * vec3(0.89, 0.6, 1.0));
 

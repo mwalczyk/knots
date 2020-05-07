@@ -14,5 +14,9 @@ csv = "1.1.1"
 rand = "0.7.0"
 image = "0.18.0"
 
+#imgui = "0.3.0"
+#clipboard = "0.5"
+#glium = { version = "0.26", default-features = true }
+
 graphics_utils = { git = "https://github.com/mwalczyk/graphics_utils" }
 
